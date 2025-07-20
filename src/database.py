@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 engine = create_engine(
-    "sqlite:///./database.db",
+    "sqlite:///./dataBase.db",
     connect_args={"check_same_thread": False},
 )
 
@@ -13,11 +13,11 @@ SessionLocal = sessionmaker(
     autocommit=False,
 )
 
-base = declarative_base()
+Base = declarative_base()
 
 
 def init_db():
-    base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
 
 
 def get_db():
@@ -26,6 +26,6 @@ def get_db():
     try:
         yield db
     except Exception as e:
-        logging.error("Error when conecting to database: ", e)
+        logging.error("Error when conecting to dataBase: ", e)
     finally:
         db.close
