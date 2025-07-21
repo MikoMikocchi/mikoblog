@@ -26,6 +26,6 @@ def get_db():
     try:
         yield db
     except Exception as e:
-        logging.error("Error when conecting to dataBase: ", e)
+        logging.error(f"Error was occured while conecting to dataBase: {e}")
     finally:
         db.close
