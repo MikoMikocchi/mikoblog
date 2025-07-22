@@ -39,19 +39,28 @@ async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db))
         )
 
 
-@app.put("/posts/{post_id}")
-async def foo(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
+@app.delete("/posts/{post_id}")
+async def delete_post(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
     post = crud.get_post_by_id(db=db, post_id=post_id)
+
     if post is None:
         raise HTTPException(
             detail={"status": "not found", "content": ""},
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
+    result = crud.delete_post_by_id(db=db, post_id=post_id)
 
-# @app.delete("/posts")
-# async def get_all_posts():
-#     return []
+    if result:
+        return JSONResponse(
+            content={"status": "success", "content": ""},
+            status_code=status.HTTP_200_OK,
+        )
+    else:
+        raise HTTPException(
+            detail={"status": "unsuccess", "content": ""},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 if __name__ == "__main__":
