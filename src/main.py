@@ -1,15 +1,57 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Path, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 import uvicorn
 
 from core.config import settings
+import schemas
+import crud
+from database import get_db
 
 
 app = FastAPI(title="Mikoblog")
 
 
-@app.get("/posts")
-async def get_all_posts():
-    return []
+@app.get("/posts", response_model=list[schemas.PostOut])
+async def get_all_posts(db: Session = Depends(get_db)):
+    all_posts = crud.get_all_posts(db)
+    return all_posts
+
+
+@app.post("/posts")
+async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db)):
+    new_post = crud.create_post(
+        db=db,
+        title=new_post.title,
+        content=new_post.content,
+        is_published=new_post.is_published,
+    )
+
+    if new_post:
+        return JSONResponse(
+            content={"status": "success", "content": new_post},
+            status_code=status.HTTP_201_CREATED,
+        )
+    else:
+        raise HTTPException(
+            detail={"status": "unsuccess", "content": ""},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@app.put("/posts/{post_id}")
+async def foo(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
+    post = crud.get_post_by_id(db=db, post_id=post_id)
+    if post is None:
+        raise HTTPException(
+            detail={"status": "not found", "content": ""},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+
+# @app.delete("/posts")
+# async def get_all_posts():
+#     return []
 
 
 if __name__ == "__main__":
