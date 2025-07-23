@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Path, status
+from fastapi import FastAPI, Depends, Form, HTTPException, Path, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import uvicorn
@@ -31,6 +31,58 @@ async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db))
         return JSONResponse(
             content={"status": "success", "content": new_post},
             status_code=status.HTTP_201_CREATED,
+        )
+    else:
+        raise HTTPException(
+            detail={"status": "unsuccess", "content": ""},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@app.put("/posts/{post_id}")
+async def update_title(
+    post_id: int = Path(gt=0), db: Session = Depends(get_db), title: str = Form(...)
+):
+    post = crud.get_post_by_id(db=db, post_id=post_id)
+
+    if post is None:
+        raise HTTPException(
+            detail={"status": "not found", "content": ""},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    result = crud.update_title_by_id(db=db, post_id=post_id, title=title)
+
+    if result:
+        return JSONResponse(
+            content={"status": "success", "content": ""},
+            status_code=status.HTTP_200_OK,
+        )
+    else:
+        raise HTTPException(
+            detail={"status": "unsuccess", "content": ""},
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@app.put("/posts/{post_id}")
+async def update_content(
+    post_id: int = Path(gt=0), db: Session = Depends(get_db), content: str = Form(...)
+):
+    post = crud.get_post_by_id(db=db, post_id=post_id)
+
+    if post is None:
+        raise HTTPException(
+            detail={"status": "not found", "content": ""},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    result = crud.update_content_by_id(db=db, post_id=post_id, content=content)
+
+    if result:
+        return JSONResponse(
+            content={"status": "success", "content": ""},
+            status_code=status.HTTP_200_OK,
         )
     else:
         raise HTTPException(
