@@ -29,3 +29,7 @@ def get_db():
         logging.error(f"Error was occured while conecting to dataBase: {e}")
     finally:
         db.close
+
+
+if __name__ == "__main__":
+    init_db()

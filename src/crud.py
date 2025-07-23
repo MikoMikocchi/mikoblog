@@ -22,7 +22,7 @@ def create_post(
 
 def get_all_posts(db: Session) -> Union[list[Post], None]:
     try:
-        all_posts = db.query(Post).all()
+        all_posts = db.query(Post).order_by(Post.id).all()
         return all_posts
     except Exception as e:
         logging.error(f"Error was occured while fetching posts: {e}")

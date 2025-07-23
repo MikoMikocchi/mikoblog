@@ -18,18 +18,27 @@ async def get_all_posts(db: Session = Depends(get_db)):
     return all_posts
 
 
+@app.get("/posts/{post_id}")
+async def get_post(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
+    post = crud.get_post_by_id(db=db, post_id=post_id)
+    return post
+
+
 @app.post("/posts")
 async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db)):
-    new_post = crud.create_post(
+    created_post = crud.create_post(
         db=db,
         title=new_post.title,
         content=new_post.content,
         is_published=new_post.is_published,
     )
 
-    if new_post:
+    if created_post:
         return JSONResponse(
-            content={"status": "success", "content": new_post},
+            content={
+                "status": "success",
+                "content": schemas.PostOut.model_validate(created_post).model_dump(),
+            },
             status_code=status.HTTP_201_CREATED,
         )
     else:
@@ -39,7 +48,7 @@ async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db))
         )
 
 
-@app.put("/posts/{post_id}")
+@app.put("/posts/{post_id}/title")
 async def update_title(
     post_id: int = Path(gt=0), db: Session = Depends(get_db), title: str = Form(...)
 ):
@@ -65,7 +74,7 @@ async def update_title(
         )
 
 
-@app.put("/posts/{post_id}")
+@app.put("/posts/{post_id}/content")
 async def update_content(
     post_id: int = Path(gt=0), db: Session = Depends(get_db), content: str = Form(...)
 ):
