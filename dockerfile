@@ -15,4 +15,6 @@ RUN poetry install
 
 COPY src .
 
+RUN python models.py
+
 CMD ["python", "main.py"]
