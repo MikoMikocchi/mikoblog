@@ -2,6 +2,8 @@ from database import Base
 from sqlalchemy import Integer, Text, String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
+from database import init_db
+
 
 class Post(Base):
     __tablename__ = "posts"
@@ -10,3 +12,7 @@ class Post(Base):
     title: Mapped[str] = mapped_column(String, index=True)
     content: Mapped[str] = mapped_column(Text)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+if __name__ == "__main__":
+    init_db()

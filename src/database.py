@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 engine = create_engine(
-    "sqlite:///./dataBase.db",
+    "sqlite:///./db.sqlite3",
     connect_args={"check_same_thread": False},
 )
 
@@ -26,10 +26,6 @@ def get_db():
     try:
         yield db
     except Exception as e:
-        logging.error(f"Error was occured while conecting to dataBase: {e}")
+        logging.error(f"Error was occured while conecting to database: {e}")
     finally:
         db.close
-
-
-if __name__ == "__main__":
-    init_db()
