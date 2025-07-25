@@ -1,106 +1,142 @@
 import logging
-from typing import Union
+from typing import List
 from models.post import Post
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+
+logger = logging.getLogger(__name__)
 
 
 def create_post(
     db: Session, title: str, content: str, is_published: bool = True
-) -> Union[Post, None]:
-
+) -> Post:
     try:
         new_post = Post(title=title, content=content, is_published=is_published)
         db.add(new_post)
         db.commit()
         db.refresh(new_post)
+        logger.info(f"Created new post with id {new_post.id}")
         return new_post
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while creating post: {e}")
+        raise
     except Exception as e:
-        logging.error(f"Error was occured while creating new post: {e}")
+        db.rollback()
+        logger.error(f"Unexpected error while creating post: {e}")
+        raise
 
-    return None
 
-
-def get_all_posts(db: Session) -> list[Post]:
+def get_all_posts(db: Session) -> List[Post]:
     try:
-        all_posts = db.query(Post).order_by(Post.id).all()
-        return all_posts or []
+        posts = db.query(Post).order_by(Post.id).all()
+        return posts or []
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching all posts: {e}")
+        raise
     except Exception as e:
-        logging.error(f"Error was occured while fetching posts: {e}")
-        raise e
+        logger.error(f"Unexpected error while fetching all posts: {e}")
+        raise
 
 
 def get_post_by_id(db: Session, post_id: int) -> Post:
     try:
         post = db.query(Post).filter(Post.id == post_id).first()
         if not post:
-            raise ValueError("Post not found")
+            logger.warning(f"Post with id {post_id} not found")
+            raise ValueError(f"Post with id {post_id} not found")
         return post
+    except ValueError:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching post {post_id}: {e}")
+        raise
     except Exception as e:
-        logging.error(f"Error fetching post by id {post_id}: {e}")
-        raise e
+        logger.error(f"Unexpected error while fetching post {post_id}: {e}")
+        raise
+
+
+def get_posts_paginated(db: Session, skip: int, limit: int) -> List[Post]:
+    try:
+        posts = db.query(Post).offset(skip).limit(limit).all()
+        return posts or []
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching paginated posts: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while fetching paginated posts: {e}")
+        raise
 
 
 def delete_post_by_id(db: Session, post_id: int) -> bool:
     try:
         post = get_post_by_id(db, post_id)
-
-        if post is not None:
-            db.delete(post)
-            db.commit()
-
-            return True
+        db.delete(post)
+        db.commit()
+        logger.info(f"Deleted post with id {post_id}")
+        return True
+    except ValueError:
+        return False
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while deleting post {post_id}: {e}")
+        raise
     except Exception as e:
-        logging.error(f"Error was occured while deleting post by id {post_id}: {e}")
+        db.rollback()
+        logger.error(f"Unexpected error while deleting post {post_id}: {e}")
+        raise
 
-    return False
+
+def update_post_field(db: Session, post_id: int, field: str, value) -> bool:
+    try:
+        post = get_post_by_id(db, post_id)
+        setattr(post, field, value)
+        db.commit()
+        logger.info(f"Updated {field} for post {post_id}")
+        return True
+    except ValueError:
+        return False
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while updating {field} for post {post_id}: {e}")
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error while updating {field} for post {post_id}: {e}")
+        raise
 
 
 def update_title_by_id(db: Session, post_id: int, title: str) -> bool:
-    try:
-        post = get_post_by_id(db, post_id)
-
-        if post is not None:
-            post.title = title
-            db.commit()
-
-            return True
-    except Exception as e:
-        logging.error(
-            f"Error was occured while updating post's title by id {post_id}: {e}"
-        )
-
-    return False
+    return update_post_field(db, post_id, "title", title)
 
 
 def update_content_by_id(db: Session, post_id: int, content: str) -> bool:
-    try:
-        post = get_post_by_id(db, post_id)
-
-        if post is not None:
-            post.content = content
-            db.commit()
-
-            return True
-    except Exception as e:
-        logging.error(
-            f"Error was occured while updating post's content by id {post_id}: {e}"
-        )
-
-    return False
+    return update_post_field(db, post_id, "content", content)
 
 
 def change_is_published_by_id(db: Session, post_id: int, is_published: bool) -> bool:
+    return update_post_field(db, post_id, "is_published", is_published)
+
+
+def update_post(db: Session, post_id: int, update_data: dict) -> Post:
     try:
         post = get_post_by_id(db, post_id)
 
-        if post is not None:
-            post.is_published = is_published
-            db.commit()
+        for key, value in update_data.items():
+            if hasattr(post, key):
+                setattr(post, key, value)
 
-            return is_published
+        db.commit()
+        db.refresh(post)
+        logger.info(f"Updated post {post_id} with fields: {list(update_data.keys())}")
+        return post
+    except ValueError:
+        raise
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error while updating post {post_id}: {e}")
+        raise
     except Exception as e:
-        logging.error(
-            f"Error was occured while updating post's content by id {post_id}: {e}"
-        )
-
-    return False
+        db.rollback()
+        logger.error(f"Unexpected error while updating post {post_id}: {e}")
+        raise
