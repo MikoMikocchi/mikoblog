@@ -1,6 +1,6 @@
 import logging
 from typing import Union
-from models import Post
+from models.post import Post
 from sqlalchemy.orm import Session
 
 

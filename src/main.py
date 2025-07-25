@@ -5,7 +5,7 @@ import uvicorn
 from core.config import settings
 import schemas
 import crud
-from models import Post
+from models.post import Post
 from database import get_db, init_db
 from responses import APIResponse
 
