@@ -22,13 +22,22 @@ def get_existing_post(db: Session = Depends(get_db), post_id: int = Path(gt=0)) 
 
 
 @app.get("/posts", response_model=APIResponse)
-async def get_all_posts(db: Session = Depends(get_db)):
-    posts = crud.get_all_posts(db)
-    if posts is None:
-        posts = []
+async def get_all_posts(page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
+    skip = (page - 1) * limit
+    posts = crud.get_posts_paginated(db, skip=skip, limit=limit)
+    total = db.query(Post).count()
+
     return APIResponse(
         status="success",
-        content=[schemas.PostOut.model_validate(p).model_dump() for p in posts],
+        content={
+            "posts": [schemas.PostOut.model_validate(p).model_dump() for p in posts],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "pages": (total + limit - 1) // limit,
+            },
+        },
     )
 
 
