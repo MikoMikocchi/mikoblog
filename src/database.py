@@ -28,4 +28,4 @@ def get_db():
     except Exception as e:
         logging.error(f"Error was occured while conecting to database: {e}")
     finally:
-        db.close
+        db.close()

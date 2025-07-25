@@ -1,126 +1,102 @@
-from fastapi import FastAPI, Depends, Form, HTTPException, Path, status
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, Form, HTTPException, Path, status
 from sqlalchemy.orm import Session
 import uvicorn
 
 from core.config import settings
-import schemas
 import crud
 from database import get_db
+from models import Post
+from responses import APIResponse
+import schemas
 
 
 app = FastAPI(title="Mikoblog")
 
 
-@app.get("/posts", response_model=list[schemas.PostOut])
-async def get_all_posts(db: Session = Depends(get_db)):
-    all_posts = crud.get_all_posts(db)
-    return all_posts
-
-
-@app.get("/posts/{post_id}")
-async def get_post(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
-    post = crud.get_post_by_id(db=db, post_id=post_id)
+def get_existing_post(db: Session = Depends(get_db), post_id: int = Path(gt=0)) -> Post:
+    post = crud.get_post_by_id(db, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
     return post
 
 
-@app.post("/posts")
+@app.get("/posts", response_model=APIResponse)
+async def get_all_posts(db: Session = Depends(get_db)):
+    posts = crud.get_all_posts(db)
+    if posts is None:
+        posts = []
+    return APIResponse(
+        status="success",
+        content=[schemas.PostOut.model_validate(p).model_dump() for p in posts],
+    )
+
+
+@app.get("/posts/{post_id}", response_model=APIResponse)
+async def get_post(post: Post = Depends(get_existing_post)):
+    return APIResponse(
+        status="success", content=schemas.PostOut.model_validate(post).model_dump()
+    )
+
+
+@app.post("/posts", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db)):
-    created_post = crud.create_post(
+    post = crud.create_post(
         db=db,
         title=new_post.title,
         content=new_post.content,
         is_published=new_post.is_published,
     )
-
-    if created_post:
-        return JSONResponse(
-            content={
-                "status": "success",
-                "content": schemas.PostOut.model_validate(created_post).model_dump(),
-            },
-            status_code=status.HTTP_201_CREATED,
+    if post:
+        return APIResponse(
+            status="success",
+            content=schemas.PostOut.model_validate(post).model_dump(),
         )
     else:
         raise HTTPException(
-            detail={"status": "unsuccess", "content": ""},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create post"
         )
 
 
-@app.put("/posts/{post_id}/title")
+@app.patch("/posts/{post_id}/title", response_model=APIResponse)
 async def update_title(
-    post_id: int = Path(gt=0), db: Session = Depends(get_db), title: str = Form(...)
+    title: str = Form(...),
+    post: Post = Depends(get_existing_post),
+    db: Session = Depends(get_db),
 ):
-    post = crud.get_post_by_id(db=db, post_id=post_id)
-
-    if post is None:
-        raise HTTPException(
-            detail={"status": "not found", "content": ""},
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    result = crud.update_title_by_id(db=db, post_id=post_id, title=title)
-
+    result = crud.update_title_by_id(db=db, post_id=post.id, title=title)
     if result:
-        return JSONResponse(
-            content={"status": "success", "content": ""},
-            status_code=status.HTTP_200_OK,
-        )
+        return APIResponse(status="success", content="Title updated")
     else:
         raise HTTPException(
-            detail={"status": "unsuccess", "content": ""},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update title"
         )
 
 
-@app.put("/posts/{post_id}/content")
+@app.patch("/posts/{post_id}/content", response_model=APIResponse)
 async def update_content(
-    post_id: int = Path(gt=0), db: Session = Depends(get_db), content: str = Form(...)
+    content: str = Form(...),
+    post: Post = Depends(get_existing_post),
+    db: Session = Depends(get_db),
 ):
-    post = crud.get_post_by_id(db=db, post_id=post_id)
-
-    if post is None:
-        raise HTTPException(
-            detail={"status": "not found", "content": ""},
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    result = crud.update_content_by_id(db=db, post_id=post_id, content=content)
-
+    result = crud.update_content_by_id(db=db, post_id=post.id, content=content)
     if result:
-        return JSONResponse(
-            content={"status": "success", "content": ""},
-            status_code=status.HTTP_200_OK,
-        )
+        return APIResponse(status="success", content="Content updated")
     else:
         raise HTTPException(
-            detail={"status": "unsuccess", "content": ""},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update content"
         )
 
 
-@app.delete("/posts/{post_id}")
-async def delete_post(post_id: int = Path(gt=0), db: Session = Depends(get_db)):
-    post = crud.get_post_by_id(db=db, post_id=post_id)
-
-    if post is None:
-        raise HTTPException(
-            detail={"status": "not found", "content": ""},
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    result = crud.delete_post_by_id(db=db, post_id=post_id)
-
+@app.delete("/posts/{post_id}", response_model=APIResponse)
+async def delete_post(
+    post: Post = Depends(get_existing_post), db: Session = Depends(get_db)
+):
+    result = crud.delete_post_by_id(db=db, post_id=post.id)
     if result:
-        return JSONResponse(
-            content={"status": "success", "content": ""},
-            status_code=status.HTTP_200_OK,
-        )
+        return APIResponse(status="success", content="Post deleted")
     else:
         raise HTTPException(
-            detail={"status": "unsuccess", "content": ""},
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to delete post"
         )
 
 
