@@ -30,14 +30,15 @@ def get_all_posts(db: Session) -> Union[list[Post], None]:
     return None
 
 
-def get_post_by_id(db: Session, post_id: int) -> Union[Post, None]:
+def get_post_by_id(db: Session, post_id: int) -> Post:
     try:
         post = db.query(Post).filter(Post.id == post_id).first()
+        if not post:
+            raise ValueError("Post not found")
         return post
     except Exception as e:
-        logging.error(f"Error was occured while fetching post by id {post_id}: {e}")
-
-    return None
+        logging.error(f"Error fetching post by id {post_id}: {e}")
+        raise e
 
 
 def delete_post_by_id(db: Session, post_id: int) -> bool:
