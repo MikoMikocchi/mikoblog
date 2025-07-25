@@ -25,7 +25,8 @@ def get_db():
     try:
         yield db
     except Exception as e:
-        logging.error(f"Error was occured while connecting to database: {e}")
+        logging.error(f"Error occurred while connecting to the database: {e}")
         raise
     finally:
-        db.close()
+        if db.is_active:
+            db.close()

@@ -92,6 +92,7 @@ def update_post_field(db: Session, post_id: int, field: str, value) -> bool:
         post = get_post_by_id(db, post_id)
         setattr(post, field, value)
         db.commit()
+        db.refresh(post)
         logger.info(f"Updated {field} for post {post_id}")
         return True
     except ValueError:
@@ -116,27 +117,3 @@ def update_content_by_id(db: Session, post_id: int, content: str) -> bool:
 
 def change_is_published_by_id(db: Session, post_id: int, is_published: bool) -> bool:
     return update_post_field(db, post_id, "is_published", is_published)
-
-
-def update_post(db: Session, post_id: int, update_data: dict) -> Post:
-    try:
-        post = get_post_by_id(db, post_id)
-
-        for key, value in update_data.items():
-            if hasattr(post, key):
-                setattr(post, key, value)
-
-        db.commit()
-        db.refresh(post)
-        logger.info(f"Updated post {post_id} with fields: {list(update_data.keys())}")
-        return post
-    except ValueError:
-        raise
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"Database error while updating post {post_id}: {e}")
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Unexpected error while updating post {post_id}: {e}")
-        raise
