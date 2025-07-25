@@ -22,10 +22,10 @@ def init_db():
 
 def get_db():
     db = SessionLocal()
-
     try:
         yield db
     except Exception as e:
-        logging.error(f"Error was occured while conecting to database: {e}")
+        logging.error(f"Error was occured while connecting to database: {e}")
+        raise
     finally:
         db.close()

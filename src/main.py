@@ -1,14 +1,15 @@
-from fastapi import Depends, FastAPI, Form, HTTPException, Path, status
+from fastapi import FastAPI, Depends, Form, HTTPException, Path, status
 from sqlalchemy.orm import Session
 import uvicorn
 
 from core.config import settings
-import crud
-from database import get_db
-from models import Post
-from responses import APIResponse
 import schemas
+import crud
+from models import Post
+from database import get_db, init_db
+from responses import APIResponse
 
+init_db()
 
 app = FastAPI(title="Mikoblog")
 

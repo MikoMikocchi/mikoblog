@@ -20,14 +20,13 @@ def create_post(
     return None
 
 
-def get_all_posts(db: Session) -> Union[list[Post], None]:
+def get_all_posts(db: Session) -> list[Post]:
     try:
         all_posts = db.query(Post).order_by(Post.id).all()
-        return all_posts
+        return all_posts or []
     except Exception as e:
         logging.error(f"Error was occured while fetching posts: {e}")
-
-    return None
+        raise e
 
 
 def get_post_by_id(db: Session, post_id: int) -> Post:
