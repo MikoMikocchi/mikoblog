@@ -11,7 +11,11 @@ def create_post(
     db: Session, title: str, content: str, is_published: bool = True
 ) -> Post:
     try:
-        new_post = Post(title=title, content=content, is_published=is_published)
+        new_post = Post(
+            title=title,
+            content=content,
+            is_published=is_published,
+        )
         db.add(new_post)
         db.commit()
         db.refresh(new_post)
