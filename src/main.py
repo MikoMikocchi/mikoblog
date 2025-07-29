@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 import uvicorn
 
 from core.config import settings
-import schemas
-import crud
-from models.post import Post
-from database import get_db, init_db
-from responses import APIResponse
+import schemas.schemas as schemas
+import db.repositories.post_repository as post_repository
+from db.models.post import Post
+from db.database import get_db, init_db
+from schemas.responses import APIResponse
 
 init_db()
 
@@ -15,7 +15,7 @@ app = FastAPI(title="Mikoblog")
 
 
 def get_existing_post(db: Session = Depends(get_db), post_id: int = Path(gt=0)) -> Post:
-    post = crud.get_post_by_id(db, post_id)
+    post = post_repository.get_post_by_id(db, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     return post
@@ -24,7 +24,7 @@ def get_existing_post(db: Session = Depends(get_db), post_id: int = Path(gt=0)) 
 @app.get("/posts", response_model=APIResponse)
 async def get_all_posts(page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
     skip = (page - 1) * limit
-    posts = crud.get_posts_paginated(db, skip=skip, limit=limit)
+    posts = post_repository.get_posts_paginated(db, skip=skip, limit=limit)
     total = db.query(Post).count()
 
     return APIResponse(
@@ -50,7 +50,7 @@ async def get_post(post: Post = Depends(get_existing_post)):
 
 @app.post("/posts", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(new_post: schemas.PostBase, db: Session = Depends(get_db)):
-    post = crud.create_post(
+    post = post_repository.create_post(
         db=db,
         title=new_post.title,
         content=new_post.content,
@@ -73,7 +73,7 @@ async def update_title(
     post: Post = Depends(get_existing_post),
     db: Session = Depends(get_db),
 ):
-    result = crud.update_title_by_id(db=db, post_id=post.id, title=title)
+    result = post_repository.update_title_by_id(db=db, post_id=post.id, title=title)
     if result:
         return APIResponse(status="success", content="Title updated")
     else:
@@ -88,7 +88,9 @@ async def update_content(
     post: Post = Depends(get_existing_post),
     db: Session = Depends(get_db),
 ):
-    result = crud.update_content_by_id(db=db, post_id=post.id, content=content)
+    result = post_repository.update_content_by_id(
+        db=db, post_id=post.id, content=content
+    )
     if result:
         return APIResponse(status="success", content="Content updated")
     else:
@@ -101,7 +103,7 @@ async def update_content(
 async def delete_post(
     post: Post = Depends(get_existing_post), db: Session = Depends(get_db)
 ):
-    result = crud.delete_post_by_id(db=db, post_id=post.id)
+    result = post_repository.delete_post_by_id(db=db, post_id=post.id)
     if result:
         return APIResponse(status="success", content="Post deleted")
     else:

@@ -1,6 +1,6 @@
 import logging
 from typing import List
-from models.post import Post
+from db.models.post import Post
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
