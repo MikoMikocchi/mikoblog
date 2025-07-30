@@ -1,5 +1,8 @@
 import logging
 from typing import List
+
+from fastapi import HTTPException, Path
+
 from db.models.post import Post
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -41,6 +44,17 @@ def get_all_posts(db: Session) -> List[Post]:
     except Exception as e:
         logger.error(f"Unexpected error while fetching all posts: {e}")
         raise
+
+
+def count_posts(db: Session):
+    return db.query(Post).count()
+
+
+def get_existing_post(db: Session, post_id: int = Path(gt=0)) -> Post:
+    post = get_post_by_id(db, post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
 
 
 def get_post_by_id(db: Session, post_id: int) -> Post:
