@@ -61,26 +61,44 @@ def create_post(db: Session, new_post: schemas.posts.PostBase):
 
 def update_title(db: Session, post_id: int, title: str):
     result = post_repository.update_title_by_id(db=db, post_id=post_id, title=title)
-    if result:
-        return APIResponse(status="success", content="Title updated")
-    else:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to update title",
         )
+
+    updated_post = post_repository.get_post_by_id(db, post_id)
+    if not updated_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found after update"
+        )
+
+    return APIResponse(
+        status="success",
+        content=schemas.posts.PostOut.model_validate(updated_post).model_dump(),
+    )
 
 
 def update_content(db: Session, post_id: int, content: str):
     result = post_repository.update_content_by_id(
         db=db, post_id=post_id, content=content
     )
-    if result:
-        return APIResponse(status="success", content="Content updated")
-    else:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to update content",
         )
+
+    updated_post = post_repository.get_post_by_id(db, post_id)
+    if not updated_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Post not found after update"
+        )
+
+    return APIResponse(
+        status="success",
+        content=schemas.posts.PostOut.model_validate(updated_post).model_dump(),
+    )
 
 
 def delete_post(db: Session, post_id: int):
