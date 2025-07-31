@@ -1,16 +1,14 @@
-from fastapi import Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
-
 from schemas.responses import APIResponse
 import schemas.posts
 import db.repositories.post_repository as post_repository
-from db.database import get_db
+from fastapi import HTTPException, status
 
 
-def get_all_posts(page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
+def get_all_posts(db: Session, page: int = 1, limit: int = 10):
     skip = (page - 1) * limit
     posts = post_repository.get_posts_paginated(db, skip=skip, limit=limit)
-    total = post_repository.count_posts(db=db)
+    total = post_repository.count_posts(db)
 
     return APIResponse(
         status="success",
@@ -38,11 +36,11 @@ def get_post_by_id(db: Session, post_id: int):
     else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Post with id {post_id} not found",
+            detail=f"Post with id {post_id} not found",
         )
 
 
-def create_post(new_post: schemas.posts.PostBase, db: Session = Depends(get_db)):
+def create_post(db: Session, new_post: schemas.posts.PostBase):
     post = post_repository.create_post(
         db=db,
         title=new_post.title,
@@ -56,29 +54,23 @@ def create_post(new_post: schemas.posts.PostBase, db: Session = Depends(get_db))
         )
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to create post"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create post",
         )
 
 
-def update_title(
-    post_id: int,
-    title: str = Form(...),
-    db: Session = Depends(get_db),
-):
+def update_title(db: Session, post_id: int, title: str):
     result = post_repository.update_title_by_id(db=db, post_id=post_id, title=title)
     if result:
         return APIResponse(status="success", content="Title updated")
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update title"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update title",
         )
 
 
-def update_content(
-    post_id: int,
-    content: str = Form(...),
-    db: Session = Depends(get_db),
-):
+def update_content(db: Session, post_id: int, content: str):
     result = post_repository.update_content_by_id(
         db=db, post_id=post_id, content=content
     )
@@ -86,18 +78,17 @@ def update_content(
         return APIResponse(status="success", content="Content updated")
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to update content"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to update content",
         )
 
 
-async def delete_post(
-    post_id: int,
-    db: Session = Depends(get_db),
-):
+def delete_post(db: Session, post_id: int):
     result = post_repository.delete_post_by_id(db=db, post_id=post_id)
     if result:
         return APIResponse(status="success", content="Post deleted")
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to delete post"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to delete post",
         )

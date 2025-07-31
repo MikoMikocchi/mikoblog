@@ -1,4 +1,5 @@
-from fastapi import Depends, Form, status, APIRouter
+# api/post_controller.py
+from fastapi import Body, Depends, Form, status, APIRouter
 from sqlalchemy.orm import Session
 
 import schemas.posts as posts
@@ -10,40 +11,45 @@ posts_router = APIRouter(prefix="/posts")
 
 
 @posts_router.get("", response_model=APIResponse)
-async def get_all_posts(page: int = 1, limit: int = 10, db: Session = Depends(get_db)):
-    return services.post_service.get_all_posts(page=page, limit=limit, db=db)
+async def get_all_posts(db: Session = Depends(get_db), page: int = 1, limit: int = 10):
+    return services.post_service.get_all_posts(db=db, page=page, limit=limit)
 
 
 @posts_router.get("/{post_id}", response_model=APIResponse)
 async def get_post(post_id: int, db: Session = Depends(get_db)):
-    return services.post_service.get_post_by_id(post_id=post_id, db=db)
+    return services.post_service.get_post_by_id(db=db, post_id=post_id)
 
 
 @posts_router.post(
     "/posts", response_model=APIResponse, status_code=status.HTTP_201_CREATED
 )
-async def create_post(new_post: posts.PostBase, db: Session = Depends(get_db)):
-    return services.post_service.create_post(new_post=new_post, db=db)
+async def create_post(
+    db: Session = Depends(get_db), new_post: posts.PostBase = Body(...)
+):
+    return services.post_service.create_post(db=db, new_post=new_post)
 
 
 @posts_router.patch("/posts/{post_id}/title", response_model=APIResponse)
 async def update_title(
     post_id: int,
-    title: str = Form(...),
     db: Session = Depends(get_db),
+    title: str = Form(...),
 ):
-    return services.post_service.update_title(post_id=post_id, title=title, db=db)
+    return services.post_service.update_title(db=db, post_id=post_id, title=title)
 
 
 @posts_router.patch("/posts/{post_id}/content", response_model=APIResponse)
 async def update_content(
     post_id: int,
-    content: str = Form(...),
     db: Session = Depends(get_db),
+    content: str = Form(...),
 ):
-    return services.post_service.update_content(post_id=post_id, content=content, db=db)
+    return services.post_service.update_content(db=db, post_id=post_id, content=content)
 
 
 @posts_router.delete("/posts/{post_id}", response_model=APIResponse)
-async def delete_post(post_id: int, db: Session = Depends(get_db)):
-    return services.post_service.delete_post(post_id=post_id, db=db)
+async def delete_post(
+    post_id: int,
+    db: Session = Depends(get_db),
+):
+    return services.post_service.delete_post(db=db, post_id=post_id)
