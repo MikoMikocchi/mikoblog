@@ -1,10 +1,20 @@
+from dotenv import load_dotenv
 import logging
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is not set in .env file")
+
 engine = create_engine(
-    "sqlite:///./db.sqlite3",
-    connect_args={"check_same_thread": False},
+    DATABASE_URL,
+    echo=True,
 )
 
 SessionLocal = sessionmaker(
@@ -25,8 +35,7 @@ def get_db():
     try:
         yield db
     except Exception as e:
-        logging.error(f"Error occurred while connecting to the database: {e}")
+        logging.error(f"Database error: {e}")
         raise
     finally:
-        if db.is_active:
-            db.close()
+        db.close()
