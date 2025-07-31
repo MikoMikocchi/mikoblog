@@ -1,16 +1,27 @@
+# docker-compose.yml
 services:
   app:
     build:
-      dockerfile: dockerfile
+      dockerfile: Dockerfile
       context: ./
+    environment:
+      DATABASE_URL: postgresql://miko:secret123@pg:5432/mikoblog_db
     ports:
       - "8000:8000"
+    depends_on:
+      - pg
 
-  pg: 
+
+  pg:
     image: postgres:17.5
     environment:
-      POSTGRES_DB: mikoblog
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mikoblog_db
+      POSTGRES_USER: miko
+      POSTGRES_PASSWORD: secret123
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
