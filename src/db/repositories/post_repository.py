@@ -74,9 +74,9 @@ def get_post_by_id(db: Session, post_id: int) -> Post:
         raise
 
 
-def get_posts_paginated(db: Session, skip: int, limit: int) -> List[Post]:
+def get_posts_paginated(db: Session, offset: int, limit: int) -> List[Post]:
     try:
-        posts = db.query(Post).offset(skip).limit(limit).all()
+        posts = db.query(Post).offset(offset).limit(limit).all()
         return posts or []
     except SQLAlchemyError as e:
         logger.error(f"Database error while fetching paginated posts: {e}")
