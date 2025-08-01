@@ -7,7 +7,7 @@ import services.post_service
 from db.database import get_db
 from schemas.responses import APIResponse
 
-posts_router = APIRouter(prefix="/posts")
+posts_router = APIRouter(prefix="/posts", tags=["Posts"])
 
 
 @posts_router.get("", response_model=APIResponse)
@@ -21,12 +21,14 @@ async def get_post(post_id: int, db: Session = Depends(get_db)):
 
 
 @posts_router.post(
-    "/posts", response_model=APIResponse, status_code=status.HTTP_201_CREATED
+    "/posts",
+    response_model=APIResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_post(
-    db: Session = Depends(get_db), new_post: posts.PostBase = Body(...)
+    db: Session = Depends(get_db), post_data: posts.PostCreate = Body(...)
 ):
-    return services.post_service.create_post(db=db, new_post=new_post)
+    return services.post_service.create_post(db=db, post_data=post_data)
 
 
 @posts_router.patch("/posts/{post_id}/title", response_model=APIResponse)

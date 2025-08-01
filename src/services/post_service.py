@@ -6,8 +6,8 @@ from fastapi import HTTPException, status
 
 
 def get_all_posts(db: Session, page: int = 1, limit: int = 10):
-    skip = (page - 1) * limit
-    posts = post_repository.get_posts_paginated(db, skip=skip, limit=limit)
+    offset = (page - 1) * limit
+    posts = post_repository.get_posts_paginated(db=db, offset=offset, limit=limit)
     total = post_repository.count_posts(db)
 
     return APIResponse(
@@ -40,12 +40,13 @@ def get_post_by_id(db: Session, post_id: int):
         )
 
 
-def create_post(db: Session, new_post: schemas.posts.PostBase):
+def create_post(db: Session, post_data: schemas.posts.PostCreate):
     post = post_repository.create_post(
         db=db,
-        title=new_post.title,
-        content=new_post.content,
-        is_published=new_post.is_published,
+        title=post_data.title,
+        content=post_data.content,
+        is_published=post_data.is_published,
+        author_id=post_data.author_id,
     )
     if post:
         return APIResponse(

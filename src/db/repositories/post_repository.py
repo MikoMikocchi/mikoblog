@@ -11,13 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 def create_post(
-    db: Session, title: str, content: str, is_published: bool = True
+    db: Session,
+    title: str,
+    content: str,
+    author_id: int,
+    is_published: bool = True,
 ) -> Post:
     try:
         new_post = Post(
             title=title,
             content=content,
             is_published=is_published,
+            author_id=author_id,
         )
         db.add(new_post)
         db.commit()
