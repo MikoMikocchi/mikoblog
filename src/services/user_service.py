@@ -6,7 +6,7 @@ from schemas.responses import APIResponse
 from fastapi import HTTPException, status
 
 
-def create_user_service(db: Session, user_data: UserCreate):
+def create_user(db: Session, user_data: UserCreate):
 
     if user_repository.get_user_by_username(db, user_data.username):
         raise HTTPException(

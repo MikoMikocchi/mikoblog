@@ -12,7 +12,7 @@ users_router = APIRouter(prefix="/users", tags=["Users"])
 
 @users_router.post("/", response_model=APIResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    return user_service.create_user_service(db=db, user_data=user_data)
+    return user_service.create_user(db=db, user_data=user_data)
 
 
 @users_router.get("/{user_id}", response_model=APIResponse)
