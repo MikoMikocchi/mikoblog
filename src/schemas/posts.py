@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
 from .users import UserOut
@@ -10,7 +11,9 @@ MIN_CONTENT_LENGTH = 10
 MAX_CONTENT_LENGTH = 50000
 MIN_WORDS_IN_CONTENT = 3
 WORDS_PER_MINUTE = 200
-FORBIDDEN_WORDS = {"spam", "advertisement", "click here"}
+
+
+FORBIDDEN_WORDS: set[str] = {"spam", "advertisement", "click here"}
 
 
 def clean_whitespace(text: str) -> str:
@@ -30,7 +33,29 @@ def count_words(text: str) -> int:
     return len(text.split())
 
 
-class PostBase(BaseModel):
+class TitleValidationMixin:
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, title: str) -> str:
+        title = clean_whitespace(title)
+        if contains_forbidden_words(title):
+            raise ValueError("Title contains inappropriate content")
+        return title
+
+
+class ContentValidationMixin:
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, content: str) -> str:
+        content = sanitize_content(content)
+        if count_words(content) < MIN_WORDS_IN_CONTENT:
+            raise ValueError(
+                f"Content must contain at least {MIN_WORDS_IN_CONTENT} words"
+            )
+        return content
+
+
+class PostBase(TitleValidationMixin, ContentValidationMixin, BaseModel):
     title: str = Field(
         ...,
         min_length=MIN_TITLE_LENGTH,
@@ -47,28 +72,12 @@ class PostBase(BaseModel):
         default=True, description="Whether the post is published"
     )
 
-    @field_validator("title")
-    def validate_title(cls, title: str) -> str:
-        title = clean_whitespace(title)
-        if contains_forbidden_words(title):
-            raise ValueError("Title contains inappropriate content")
-        return title
-
-    @field_validator("content")
-    def validate_content(cls, content: str) -> str:
-        content = sanitize_content(content)
-        if count_words(content) < MIN_WORDS_IN_CONTENT:
-            raise ValueError(
-                f"Content must contain at least {MIN_WORDS_IN_CONTENT} words"
-            )
-        return content
-
 
 class PostCreate(PostBase):
     author_id: int = Field(..., gt=0, description="ID of the post author")
 
 
-class PostUpdate(BaseModel):
+class PostUpdate(TitleValidationMixin, ContentValidationMixin, BaseModel):
     title: Optional[str] = Field(
         None,
         min_length=MIN_TITLE_LENGTH,
@@ -82,26 +91,6 @@ class PostUpdate(BaseModel):
         description="New post content",
     )
     is_published: Optional[bool] = Field(None, description="New publication status")
-
-    @field_validator("title")
-    def validate_title(cls, title: Optional[str]) -> Optional[str]:
-        if title is None:
-            return title
-        title = clean_whitespace(title)
-        if contains_forbidden_words(title):
-            raise ValueError("Title contains inappropriate content")
-        return title
-
-    @field_validator("content")
-    def validate_content(cls, content: Optional[str]) -> Optional[str]:
-        if content is None:
-            return content
-        content = sanitize_content(content)
-        if count_words(content) < MIN_WORDS_IN_CONTENT:
-            raise ValueError(
-                f"Content must contain at least {MIN_WORDS_IN_CONTENT} words"
-            )
-        return content
 
 
 class PostOut(PostBase):
@@ -117,21 +106,9 @@ class PostOut(PostBase):
 
     model_config = {"from_attributes": True}
 
-    @field_validator("word_count", mode="before")
-    @classmethod
-    def calculate_word_count(cls, v, info):
-        if hasattr(info, "data") and info.data and "content" in info.data:
-            return count_words(info.data["content"])
-        return v if v is not None else 0
-
-    @field_validator("reading_time", mode="before")
-    @classmethod
-    def calculate_reading_time(cls, v, info):
-        if hasattr(info, "data") and info.data:
-            word_count = info.data.get("word_count", 0)
-            if word_count and word_count > 0:
-                return max(1, round(word_count / WORDS_PER_MINUTE))
-        return v if v is not None else 1
+    def model_post_init(self, __context):
+        self.word_count = count_words(self.content)
+        self.reading_time = max(1, round(self.word_count / WORDS_PER_MINUTE))
 
 
 class PostSummary(BaseModel):
@@ -147,7 +124,7 @@ class PostSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PostTitleUpdate(BaseModel):
+class PostTitleUpdate(TitleValidationMixin, BaseModel):
     title: str = Field(
         ...,
         min_length=MIN_TITLE_LENGTH,
@@ -155,30 +132,14 @@ class PostTitleUpdate(BaseModel):
         description="New post title",
     )
 
-    @field_validator("title")
-    def validate_title(cls, title: str) -> str:
-        title = clean_whitespace(title)
-        if contains_forbidden_words(title):
-            raise ValueError("Title contains inappropriate content")
-        return title
 
-
-class PostContentUpdate(BaseModel):
+class PostContentUpdate(ContentValidationMixin, BaseModel):
     content: str = Field(
         ...,
         min_length=MIN_CONTENT_LENGTH,
         max_length=MAX_CONTENT_LENGTH,
         description="New post content",
     )
-
-    @field_validator("content")
-    def validate_content(cls, content: str) -> str:
-        content = sanitize_content(content)
-        if count_words(content) < MIN_WORDS_IN_CONTENT:
-            raise ValueError(
-                f"Content must contain at least {MIN_WORDS_IN_CONTENT} words"
-            )
-        return content
 
 
 class PostPublishToggle(BaseModel):
@@ -200,6 +161,12 @@ class PostStatistics(BaseModel):
     )
 
 
+class SortOption(str, Enum):
+    newest = "newest"
+    oldest = "oldest"
+    popular = "popular"
+
+
 class PostSearchQuery(BaseModel):
     query: str = Field(..., min_length=2, max_length=100, description="Search query")
     published_only: bool = Field(
@@ -207,3 +174,4 @@ class PostSearchQuery(BaseModel):
     )
     author_id: Optional[int] = Field(None, gt=0, description="Filter by author ID")
     limit: int = Field(default=10, ge=1, le=50, description="Maximum number of results")
+    sort: SortOption = Field(default=SortOption.newest, description="Sorting option")
