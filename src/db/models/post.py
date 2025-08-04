@@ -34,7 +34,7 @@ POST_INDEXES = (
         "created_at",
         postgresql_ops={"created_at": "DESC"},
     ),
-    # Enable trigram search on title
+    # Enable trigram search on title (pg_trgm required)
     Index(
         "ix_post_title_search",
         "title",
