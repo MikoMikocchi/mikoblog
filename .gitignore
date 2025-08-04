@@ -214,3 +214,6 @@ __marimo__/
 
 # JetBrains
 .idea/
+
+# Secrets
+secrets/
