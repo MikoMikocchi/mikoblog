@@ -18,19 +18,23 @@ from ..database import Base
 DEFAULT_EXCERPT_LENGTH = 200
 
 POST_INDEXES = (
+    # Optimize fetching posts by author and publication status
     Index("ix_post_author_published", "author_id", "is_published"),
+    # Optimize feeds and timeline queries by published status and recency
     Index(
         "ix_post_published_created",
         "is_published",
         "created_at",
         postgresql_ops={"created_at": "DESC"},
     ),
+    # Optimize author timelines by recency
     Index(
         "ix_post_author_created",
         "author_id",
         "created_at",
         postgresql_ops={"created_at": "DESC"},
     ),
+    # Enable trigram search on title
     Index(
         "ix_post_title_search",
         "title",
@@ -41,6 +45,19 @@ POST_INDEXES = (
 
 
 class Post(Base):
+    """SQLAlchemy model representing a blog post.
+
+    Attributes:
+        id (int): Unique post identifier.
+        title (str): Post title, max 128 characters.
+        content (str): Full post content (unbounded text).
+        is_published (bool): Publication status; True if visible publicly.
+        created_at (datetime): Creation timestamp (UTC).
+        updated_at (datetime): Last modification timestamp (UTC).
+        author_id (int): ID of the user who authored this post.
+        author (User): Relationship to the post author.
+    """
+
     __tablename__ = "posts"
     __table_args__ = POST_INDEXES
 
@@ -98,9 +115,7 @@ class Post(Base):
     )
 
     def __repr__(self) -> str:
-        """
-        Return a string representation of the Post instance.
-        """
+        """Return the formal string representation for debugging."""
         title_value = getattr(self, "title", None)
         if isinstance(title_value, str) and title_value:
             title_repr = (
@@ -111,9 +126,7 @@ class Post(Base):
         return f"<Post(id={self.id}, title={title_repr!r}, author_id={self.author_id})>"
 
     def __str__(self) -> str:
-        """
-        Return a user-friendly string describing the post.
-        """
+        """Return a user-friendly string describing the post."""
         status = "Published" if getattr(self, "is_published", False) else "Draft"
         author_name = (
             getattr(self.author, "username", "Unknown") if self.author else "Unknown"
@@ -123,14 +136,11 @@ class Post(Base):
 
     @hybrid_property
     def is_draft(self) -> bool:
-        """
-        Return True if the post is a draft (not published).
-        """
+        """Return True if the post is a draft (not published)."""
         return not getattr(self, "is_published", False)
 
     def get_excerpt(self, length: int = DEFAULT_EXCERPT_LENGTH) -> str:
-        """
-        Return a shortened preview of the post content.
+        """Return a shortened preview of the post content.
 
         Args:
             length (int): Maximum length of the excerpt.
