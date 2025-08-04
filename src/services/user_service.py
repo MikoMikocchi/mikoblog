@@ -12,11 +12,14 @@ logger = logging.getLogger(__name__)
 
 def get_user_by_id(db: Session, user_id: int) -> SuccessResponse[UserOut]:
     user = user_repository.get_user_by_id(db, user_id)
-    payload = {
-        "success": True,
-        "data": UserOut.model_validate(user).model_dump(),
-    }
-    return SuccessResponse[UserOut].model_validate(payload)
+    if user is None:
+        logger.info("User %s not found", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with id {user_id} not found",
+        )
+    # Pass Pydantic model instance to SuccessResponse.ok to satisfy type parameter T=UserOut
+    return SuccessResponse[UserOut].ok(UserOut.model_validate(user))
 
 
 def create_user(db: Session, user_data: UserCreate) -> SuccessResponse[UserOut]:
@@ -44,11 +47,7 @@ def create_user(db: Session, user_data: UserCreate) -> SuccessResponse[UserOut]:
             hashed_password=hashed_password,
         )
 
-        payload = {
-            "success": True,
-            "data": UserOut.model_validate(db_user).model_dump(),
-        }
-        return SuccessResponse[UserOut].model_validate(payload)
+        return SuccessResponse[UserOut].ok(UserOut.model_validate(db_user))
 
     except HTTPException:
         raise
