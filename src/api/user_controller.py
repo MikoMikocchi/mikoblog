@@ -7,10 +7,19 @@ from schemas.users import UserCreate, UserOut
 from services import user_service
 from schemas.responses import SuccessResponse
 
-users_router = APIRouter(prefix="/users", tags=["Users"])
+users_router = APIRouter(
+    prefix="/users",
+    tags=["Users"],
+)
 
 
-@users_router.get("/{user_id}", response_model=SuccessResponse[UserOut])
+@users_router.get(
+    "/{user_id}",
+    response_model=SuccessResponse[UserOut],
+    summary="Get user by ID",
+    description="Fetch a single user by ID.",
+    response_model_exclude_none=True,
+)
 async def get_user(user_id: int, db: Session = Depends(get_db)):
     return user_service.get_user_by_id(db=db, user_id=user_id)
 
@@ -19,6 +28,9 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
     "",
     response_model=SuccessResponse[UserOut],
     status_code=status.HTTP_201_CREATED,
+    summary="Create user",
+    description="Register a new user with a unique username, email, and strong password.",
+    response_model_exclude_none=True,
 )
 async def create_user(user_data: UserCreate = Body(...), db: Session = Depends(get_db)):
     return user_service.create_user(db=db, user_data=user_data)

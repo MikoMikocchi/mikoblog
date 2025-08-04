@@ -8,10 +8,19 @@ from db.database import get_db
 from schemas.responses import SuccessResponse, PaginatedResponse
 from schemas.posts import PostOut
 
-posts_router = APIRouter(prefix="/posts", tags=["Posts"])
+posts_router = APIRouter(
+    prefix="/posts",
+    tags=["Posts"],
+)
 
 
-@posts_router.get("", response_model=PaginatedResponse[PostOut])
+@posts_router.get(
+    "",
+    response_model=PaginatedResponse[PostOut],
+    summary="List posts",
+    description="Get a paginated list of posts ordered by ID with author preloaded.",
+    response_model_exclude_none=True,
+)
 async def get_all_posts(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number starting from 1"),
@@ -20,7 +29,13 @@ async def get_all_posts(
     return services.post_service.get_all_posts(db=db, page=page, limit=limit)
 
 
-@posts_router.get("/{post_id}", response_model=SuccessResponse[PostOut])
+@posts_router.get(
+    "/{post_id}",
+    response_model=SuccessResponse[PostOut],
+    summary="Get post by ID",
+    description="Fetch a single post by its identifier with the author included.",
+    response_model_exclude_none=True,
+)
 async def get_post(post_id: int, db: Session = Depends(get_db)):
     return services.post_service.get_post_by_id(db=db, post_id=post_id)
 
@@ -29,6 +44,9 @@ async def get_post(post_id: int, db: Session = Depends(get_db)):
     "",
     response_model=SuccessResponse[PostOut],
     status_code=status.HTTP_201_CREATED,
+    summary="Create post",
+    description="Create a new post with title, content, author and publication status.",
+    response_model_exclude_none=True,
 )
 async def create_post(
     db: Session = Depends(get_db), post_data: posts.PostCreate = Body(...)
@@ -58,7 +76,12 @@ async def update_content(
     )
 
 
-@posts_router.delete("/{post_id}", response_model=SuccessResponse[str])
+@posts_router.delete(
+    "/{post_id}",
+    response_model=SuccessResponse[str],
+    summary="Delete post",
+    description="Delete a post by ID. Returns a confirmation message.",
+)
 async def delete_post(
     post_id: int,
     db: Session = Depends(get_db),
