@@ -28,7 +28,7 @@ def get_all_posts(
     posts = post_repository.get_posts_paginated(db=db, offset=offset, limit=limit)
     total = post_repository.count_posts(db)
 
-    items = [schemas.posts.PostOut.model_validate(p).model_dump() for p in posts]
+    items = [schemas.posts.PostOut.model_validate(p) for p in posts]
     total_pages = max(1, (total + limit - 1) // limit)
     pagination = PaginationMeta(
         page=page,
@@ -38,8 +38,9 @@ def get_all_posts(
         has_next=page < total_pages,
         has_prev=page > 1,
     )
-    payload = {"success": True, "data": items, "pagination": pagination.model_dump()}
-    return PaginatedResponse[schemas.posts.PostOut].model_validate(payload)
+    return PaginatedResponse[schemas.posts.PostOut].ok(
+        items=items, pagination=pagination
+    )
 
 
 def get_post_by_id(db: Session, post_id: int) -> SuccessResponse[schemas.posts.PostOut]:
@@ -49,11 +50,9 @@ def get_post_by_id(db: Session, post_id: int) -> SuccessResponse[schemas.posts.P
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Post with id {post_id} not found",
         )
-    payload = {
-        "success": True,
-        "data": schemas.posts.PostOut.model_validate(post).model_dump(),
-    }
-    return SuccessResponse[schemas.posts.PostOut].model_validate(payload)
+    return SuccessResponse[schemas.posts.PostOut].ok(
+        schemas.posts.PostOut.model_validate(post)
+    )
 
 
 def create_post(
@@ -71,11 +70,9 @@ def create_post(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to create post",
         )
-    payload = {
-        "success": True,
-        "data": schemas.posts.PostOut.model_validate(post).model_dump(),
-    }
-    return SuccessResponse[schemas.posts.PostOut].model_validate(payload)
+    return SuccessResponse[schemas.posts.PostOut].ok(
+        schemas.posts.PostOut.model_validate(post)
+    )
 
 
 def update_title(
@@ -94,11 +91,9 @@ def update_title(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found after update"
         )
 
-    payload = {
-        "success": True,
-        "data": schemas.posts.PostOut.model_validate(updated_post).model_dump(),
-    }
-    return SuccessResponse[schemas.posts.PostOut].model_validate(payload)
+    return SuccessResponse[schemas.posts.PostOut].ok(
+        schemas.posts.PostOut.model_validate(updated_post)
+    )
 
 
 def update_content(
@@ -119,11 +114,9 @@ def update_content(
             status_code=status.HTTP_404_NOT_FOUND, detail="Post not found after update"
         )
 
-    payload = {
-        "success": True,
-        "data": schemas.posts.PostOut.model_validate(updated_post).model_dump(),
-    }
-    return SuccessResponse[schemas.posts.PostOut].model_validate(payload)
+    return SuccessResponse[schemas.posts.PostOut].ok(
+        schemas.posts.PostOut.model_validate(updated_post)
+    )
 
 
 def delete_post(db: Session, post_id: int) -> SuccessResponse[str]:
@@ -134,5 +127,4 @@ def delete_post(db: Session, post_id: int) -> SuccessResponse[str]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found",
         )
-    payload = {"success": True, "data": "Post deleted"}
-    return SuccessResponse[str].model_validate(payload)
+    return SuccessResponse[str].ok("Post deleted")
