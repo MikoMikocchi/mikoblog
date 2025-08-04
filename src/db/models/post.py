@@ -1,19 +1,144 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
-from db.database import Base
 from datetime import datetime
+
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+)
+from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.orm import relationship
+
+from ..database import Base
+
+DEFAULT_EXCERPT_LENGTH = 200
+
+POST_INDEXES = (
+    Index("ix_post_author_published", "author_id", "is_published"),
+    Index(
+        "ix_post_published_created",
+        "is_published",
+        "created_at",
+        postgresql_ops={"created_at": "DESC"},
+    ),
+    Index(
+        "ix_post_author_created",
+        "author_id",
+        "created_at",
+        postgresql_ops={"created_at": "DESC"},
+    ),
+    Index(
+        "ix_post_title_search",
+        "title",
+        postgresql_using="gin",
+        postgresql_ops={"title": "gin_trgm_ops"},
+    ),
+)
 
 
 class Post(Base):
     __tablename__ = "posts"
+    __table_args__ = POST_INDEXES
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(128), nullable=False)
-    content = Column(Text, nullable=False)
-    is_published = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+        doc="Unique post identifier",
+    )
+    title = Column(
+        String(128),
+        nullable=False,
+        index=True,
+        doc="Post title with maximum 128 characters",
+    )
+    content = Column(
+        Text,
+        nullable=False,
+        doc="Full post content",
+    )
+    is_published = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+        index=True,
+        doc="Whether the post is published",
+    )
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True,
+        doc="Post creation timestamp",
+    )
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+        index=True,
+        doc="Last modification timestamp",
+    )
+    author_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        doc="ID of the user who authored this post",
+    )
+    author = relationship(
+        "User",
+        back_populates="posts",
+        lazy="joined",
+        doc="Author of this post",
+    )
 
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    def __repr__(self) -> str:
+        """
+        Return a string representation of the Post instance.
+        """
+        title_value = getattr(self, "title", None)
+        if isinstance(title_value, str) and title_value:
+            title_repr = (
+                title_value[:30] + "..." if len(title_value) > 30 else title_value
+            )
+        else:
+            title_repr = ""
+        return f"<Post(id={self.id}, title={title_repr!r}, author_id={self.author_id})>"
 
-    author = relationship("User", back_populates="posts")
+    def __str__(self) -> str:
+        """
+        Return a user-friendly string describing the post.
+        """
+        status = "Published" if getattr(self, "is_published", False) else "Draft"
+        author_name = (
+            getattr(self.author, "username", "Unknown") if self.author else "Unknown"
+        )
+        title = getattr(self, "title", "") or ""
+        return f"Post '{title}' by {author_name} ({status})"
+
+    @hybrid_property
+    def is_draft(self) -> bool:
+        """
+        Return True if the post is a draft (not published).
+        """
+        return not getattr(self, "is_published", False)
+
+    def get_excerpt(self, length: int = DEFAULT_EXCERPT_LENGTH) -> str:
+        """
+        Return a shortened preview of the post content.
+
+        Args:
+            length (int): Maximum length of the excerpt.
+
+        Returns:
+            str: Truncated content with ellipsis if necessary.
+        """
+        content = getattr(self, "content", "") or ""
+        if len(content) <= length:
+            return content
+        return content[:length] + "..."
