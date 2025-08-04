@@ -2,47 +2,20 @@ import os
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-class DatabaseConfig(BaseModel):
-    url: str = Field(..., description="Database connection URL")
-    echo: bool = Field(default=False, description="Enable SQL query logging")
-    pool_size: int = Field(default=10, ge=1, le=100)
-    max_overflow: int = Field(default=20, ge=0, le=100)
-    pool_timeout: int = Field(default=30, ge=1, le=300)
-    pool_pre_ping: bool = Field(default=True)
-
-
-class SecurityConfig(BaseModel):
-    secret_key: str = Field(..., min_length=32, description="JWT secret key")
-    algorithm: str = Field(default="HS256", description="JWT algorithm")
-    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
-
-    @field_validator("secret_key")
-    @classmethod
-    def validate_secret_key(cls, v: str) -> str:
-        if len(v) < 32:
-            raise ValueError("Secret key must be at least 32 characters long")
-        return v
-
-
-class ServerConfig(BaseModel):
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, ge=1, le=65535, description="Server port")
-    reload: bool = Field(default=False, description="Enable auto-reload in development")
-    check_db_on_start: bool = Field(
-        default=True, description="Run DB connection check on startup"
-    )
-
-
-class LoggingConfig(BaseModel):
-    level: str = Field(default="INFO", pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-    format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+from .config_models import (
+    DatabaseConfig,
+    LoggingConfig,
+    SecurityConfig,
+    ServerConfig,
+)
 
 
 class Settings(BaseSettings):
+    """Application settings assembled from environment variables and defaults."""
+
     # Environment
     environment: str = Field(
         default="development", pattern="^(development|staging|production)$"
@@ -60,10 +33,10 @@ class Settings(BaseSettings):
     # Logging
     logging: LoggingConfig = LoggingConfig()
 
-    # Database (will be populated in model_post_init)
+    # Database (populated in validator)
     database: Optional[DatabaseConfig] = None
 
-    # Security (will be populated in model_post_init)
+    # Security (populated in validator)
     security: Optional[SecurityConfig] = None
 
     # Pydantic v2 settings config
@@ -76,6 +49,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _assemble_subconfigs(self):
+        """Assemble nested configurations from environment variables."""
         # DATABASE_URL
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
@@ -131,7 +105,8 @@ class Settings(BaseSettings):
 
 
 @lru_cache()
-def get_settings() -> Settings:
+def get_settings() -> "Settings":
+    """Return cached settings instance."""
     return Settings()
 
 
