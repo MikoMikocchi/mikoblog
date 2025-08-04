@@ -1,5 +1,5 @@
 # api/post_controller.py
-from fastapi import Body, Depends, Form, status, APIRouter
+from fastapi import Body, Depends, Form, status, APIRouter, Query
 from sqlalchemy.orm import Session
 
 import schemas.posts as posts
@@ -12,7 +12,11 @@ posts_router = APIRouter(prefix="/posts", tags=["Posts"])
 
 
 @posts_router.get("", response_model=PaginatedResponse[PostOut])
-async def get_all_posts(db: Session = Depends(get_db), page: int = 1, limit: int = 10):
+async def get_all_posts(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number starting from 1"),
+    limit: int = Query(10, ge=1, le=100, description="Page size (1..100)"),
+):
     return services.post_service.get_all_posts(db=db, page=page, limit=limit)
 
 
