@@ -16,8 +16,7 @@ class BaseResponse(BaseModel):
         default_factory=datetime.utcnow, description="Response timestamp"
     )
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = {"ser_json_timedelta": "float"}
 
 
 class SuccessResponse(BaseResponse, GenericModel, Generic[T]):
@@ -77,7 +76,7 @@ class PaginatedResponse(BaseResponse, GenericModel, Generic[T]):
             {
                 "success": True,
                 "data": items,
-                "pagination": pagination.model_dump(),
+                "pagination": pagination,
                 "message": message,
             }
         )
