@@ -2,8 +2,8 @@ import os
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseConfig(BaseModel):
@@ -22,7 +22,8 @@ class SecurityConfig(BaseModel):
     password_min_length: int = Field(default=12, ge=8, le=128)
 
     @field_validator("secret_key")
-    def validate_secret_key(cls, v):
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("Secret key must be at least 32 characters long")
         return v
@@ -40,18 +41,16 @@ class LoggingConfig(BaseModel):
 
 
 class Settings(BaseSettings):
-
     # Environment
     environment: str = Field(
         default="development", pattern="^(development|staging|production)$"
     )
     debug: bool = Field(default=False)
 
-    # Database
-    database: Optional[DatabaseConfig] = None
-
-    # Security
-    security: Optional[SecurityConfig] = None
+    # API
+    api_title: str = Field(default="MikoBlog API")
+    api_version: str = Field(default="1.0.0")
+    api_description: str = Field(default="A modern blog API built with FastAPI")
 
     # Server
     server: ServerConfig = ServerConfig()
@@ -59,35 +58,49 @@ class Settings(BaseSettings):
     # Logging
     logging: LoggingConfig = LoggingConfig()
 
-    # API
-    api_title: str = Field(default="MikoBlog API")
-    api_version: str = Field(default="1.0.0")
-    api_description: str = Field(default="A modern blog API built with FastAPI")
+    # Database (will be populated in model_post_init)
+    database: Optional[DatabaseConfig] = None
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    # Security (will be populated in model_post_init)
+    security: Optional[SecurityConfig] = None
 
-        # Initialize database config
+    # Pydantic v2 settings config
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @model_validator(mode="after")
+    def _assemble_subconfigs(self):
+        # DATABASE_URL
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL environment variable is required")
 
+        # DatabaseConfig assembly from env with defaults
+        pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
+        max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+        pool_timeout = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+        echo = self.environment == "development" and self.debug
+
         self.database = DatabaseConfig(
             url=database_url,
-            echo=self.environment == "development" and self.debug,
-            pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
-            max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
-            pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+            echo=echo,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            pool_timeout=pool_timeout,
         )
 
-        # Initialize security config
+        # SECRET_KEY
         secret_key = os.getenv("SECRET_KEY")
         if not secret_key:
             if self.environment == "production":
                 raise ValueError(
                     "SECRET_KEY environment variable is required in production"
                 )
-            # Generate a development key (should never be used in production)
+            # Development fallback (never for production)
             secret_key = "dev-secret-key-not-for-production-use-32-chars-minimum"
 
         self.security = SecurityConfig(
@@ -102,10 +115,7 @@ class Settings(BaseSettings):
         elif self.environment == "development":
             self.logging.level = "DEBUG"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+        return self
 
 
 @lru_cache()
