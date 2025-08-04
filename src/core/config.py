@@ -33,6 +33,9 @@ class ServerConfig(BaseModel):
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, ge=1, le=65535, description="Server port")
     reload: bool = Field(default=False, description="Enable auto-reload in development")
+    check_db_on_start: bool = Field(
+        default=True, description="Run DB connection check on startup"
+    )
 
 
 class LoggingConfig(BaseModel):
@@ -114,6 +117,16 @@ class Settings(BaseSettings):
             self.logging.level = "WARNING"
         elif self.environment == "development":
             self.logging.level = "DEBUG"
+
+        # Server env overrides
+        check_flag = os.getenv("DB_CHECK_ON_START")
+        if isinstance(check_flag, str):
+            self.server.check_db_on_start = check_flag.strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
 
         return self
 

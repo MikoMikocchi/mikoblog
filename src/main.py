@@ -24,11 +24,15 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.info("Database initialized successfully")
 
-        if check_db_connection():
-            logger.info("Database connection verified")
+        # Optional DB health check controlled by settings.server.check_db_on_start
+        if settings.server.check_db_on_start:
+            if check_db_connection():
+                logger.info("Database connection verified")
+            else:
+                logger.error("Database connection failed")
+                raise RuntimeError("Database connection failed")
         else:
-            logger.error("Database connection failed")
-            raise RuntimeError("Database connection failed")
+            logger.debug("Skipping DB connection check on startup (disabled by config)")
 
         logger.info("Application startup completed")
 
