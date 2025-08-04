@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+
 USERNAME_PATTERN = r"^[a-zA-Z0-9_-]+$"
 MIN_USERNAME_LENGTH = 3
 MAX_USERNAME_LENGTH = 50
@@ -38,6 +39,8 @@ def validate_username(username: str) -> str:
 
 
 class UserBase(BaseModel):
+    """Base constraints for user identity."""
+
     username: str = Field(
         ...,
         min_length=MIN_USERNAME_LENGTH,
@@ -49,6 +52,8 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    """Payload to create a new user."""
+
     password: str = Field(
         ...,
         min_length=MIN_PASSWORD_LENGTH,
@@ -65,7 +70,49 @@ class UserCreate(UserBase):
         return validate_username(v)
 
 
+class UserReplace(BaseModel):
+    """Full replacement payload (PUT) with required fields."""
+
+    username: str = Field(
+        ...,
+        min_length=MIN_USERNAME_LENGTH,
+        max_length=MAX_USERNAME_LENGTH,
+        pattern=USERNAME_PATTERN,
+        description="New username",
+    )
+    email: EmailStr = Field(..., description="New email address")
+    password: str = Field(
+        ...,
+        min_length=MIN_PASSWORD_LENGTH,
+        max_length=MAX_PASSWORD_LENGTH,
+        description="New password",
+    )
+
+    @field_validator("password")
+    def validate_password_strength(cls, v: str) -> str:
+        return validate_password(v)
+
+    @field_validator("username")
+    def validate_reserved_usernames(cls, v: str) -> str:
+        return validate_username(v)
+
+
+class UserQuery(BaseModel):
+    """Query filters for listing users with exact matches."""
+
+    username: Optional[str] = Field(
+        None,
+        min_length=MIN_USERNAME_LENGTH,
+        max_length=MAX_USERNAME_LENGTH,
+        pattern=USERNAME_PATTERN,
+        description="Exact username filter",
+    )
+    email: Optional[EmailStr] = Field(None, description="Exact email filter")
+
+
 class UserUpdate(BaseModel):
+    """Partial update (PATCH)."""
+
     username: Optional[str] = Field(
         None,
         min_length=MIN_USERNAME_LENGTH,
@@ -95,6 +142,8 @@ class UserUpdate(BaseModel):
 
 
 class UserOut(UserBase):
+    """Response projection for user."""
+
     id: int = Field(..., description="User ID")
     created_at: datetime = Field(..., description="User creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
