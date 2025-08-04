@@ -1,5 +1,5 @@
 # api/post_controller.py
-from fastapi import Body, Depends, Form, status, APIRouter, Query
+from fastapi import Body, Depends, status, APIRouter, Query
 from sqlalchemy.orm import Session
 
 import schemas.posts as posts
@@ -40,18 +40,22 @@ async def create_post(
 async def update_title(
     post_id: int,
     db: Session = Depends(get_db),
-    title: str = Form(...),
+    payload: posts.PostTitleUpdate = Body(...),
 ):
-    return services.post_service.update_title(db=db, post_id=post_id, title=title)
+    return services.post_service.update_title(
+        db=db, post_id=post_id, title=payload.title
+    )
 
 
 @posts_router.patch("/{post_id}/content", response_model=SuccessResponse[PostOut])
 async def update_content(
     post_id: int,
     db: Session = Depends(get_db),
-    content: str = Form(...),
+    payload: posts.PostContentUpdate = Body(...),
 ):
-    return services.post_service.update_content(db=db, post_id=post_id, content=content)
+    return services.post_service.update_content(
+        db=db, post_id=post_id, content=payload.content
+    )
 
 
 @posts_router.delete("/{post_id}", response_model=SuccessResponse[str])
