@@ -6,10 +6,13 @@ from fastapi import FastAPI
 import uvicorn
 
 from core.config import settings
+from core.logging import setup_logging
 from api.user_controller import users_router
 from api.post_controller import posts_router
 from db.database import init_db, close_db_connections, check_db_connection
 
+# Initialize global logging configuration early
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
