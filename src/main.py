@@ -1,20 +1,86 @@
+import logging
+from datetime import datetime
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 import uvicorn
 
 from core.config import settings
-from db.database import init_db
-from api import posts_router, users_router
+from api.user_controller import users_router
+from api.post_controller import posts_router
+from db.database import init_db, close_db_connections, check_db_connection
 
-init_db()
+logger = logging.getLogger(__name__)
 
-app = FastAPI()
-app.include_router(posts_router)
-app.include_router(users_router)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up MikoBlog API")
+
+    try:
+        init_db()
+        logger.info("Database initialized successfully")
+
+        if check_db_connection():
+            logger.info("Database connection verified")
+        else:
+            logger.error("Database connection failed")
+            raise RuntimeError("Database connection failed")
+
+        logger.info("Application startup completed")
+
+    except Exception as e:
+        logger.error(f"Application startup failed: {e}")
+        raise
+
+    yield
+
+    logger.info("Shutting down MikoBlog API")
+
+    try:
+        close_db_connections()
+        logger.info("Database connections closed")
+        logger.info("Application shutdown completed")
+
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
+
+app = FastAPI(
+    title=settings.api_title,
+    version=settings.api_version,
+    description=settings.api_description,
+    debug=settings.debug,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.environment != "production" else None,
+    redoc_url="/redoc" if settings.environment != "production" else None,
+    openapi_url="/openapi.json" if settings.environment != "production" else None,
+)
+
+
+app.include_router(users_router, prefix="/api/v1")
+app.include_router(posts_router, prefix="/api/v1")
+
+
+# Root endpoint
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "success": True,
+        "message": f"Welcome to {settings.api_title}",
+        "version": settings.api_version,
+        "docs": "/docs",
+        "health": "/health",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host=settings.run.host,
-        port=settings.run.port,
-        reload=True,
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=settings.server.reload,
+        log_level=settings.logging.level.lower(),
+        access_log=settings.environment == "development",
     )
