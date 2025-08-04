@@ -26,15 +26,24 @@ async def lifespan(app: FastAPI):
         init_db()
         logger.info("Database initialized successfully")
 
-        # Optional DB health check controlled by settings.server.check_db_on_start
-        if settings.server.check_db_on_start:
+        # Optional DB health check controlled by environment flag DB_CHECK_ON_START
+        import os as _os
+
+        db_check_env = _os.getenv("DB_CHECK_ON_START", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if db_check_env:
             if check_db_connection():
                 logger.info("Database connection verified")
             else:
                 logger.error("Database connection failed")
                 raise RuntimeError("Database connection failed")
         else:
-            logger.debug("Skipping DB connection check on startup (disabled by config)")
+            logger.debug(
+                "Skipping DB connection check on startup (DB_CHECK_ON_START=false)"
+            )
 
         logger.info("Application startup completed")
 
