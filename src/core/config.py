@@ -19,7 +19,6 @@ class SecurityConfig(BaseModel):
     secret_key: str = Field(..., min_length=32, description="JWT secret key")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
-    password_min_length: int = Field(default=12, ge=8, le=128)
 
     @field_validator("secret_key")
     @classmethod
