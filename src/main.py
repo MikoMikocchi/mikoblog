@@ -6,11 +6,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 
+
 from core.config import settings
 from core.logging import setup_logging
 from core.exceptions import BlogException, map_exception_to_http
 from api.user_controller import users_router
 from api.post_controller import posts_router
+from api.auth_controller import auth_router
 from db.database import init_db, close_db_connections, check_db_connection
 
 # Initialize global logging configuration early
@@ -78,6 +80,7 @@ app = FastAPI(
 
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(posts_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 
 
 # Global exception handler for domain-level exceptions
