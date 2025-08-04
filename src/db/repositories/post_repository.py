@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional, Any
 
 from db.models.post import Post
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from db.utils import transactional
 from core.exceptions import ValidationError, NotFoundError, DatabaseError
@@ -38,7 +38,9 @@ def create_post(
 
 def get_all_posts(db: Session) -> List[Post]:
     try:
-        posts: List[Post] = db.query(Post).order_by(Post.id).all()
+        posts: List[Post] = (
+            db.query(Post).options(joinedload(Post.author)).order_by(Post.id).all()
+        )
         return posts
     except SQLAlchemyError as e:
         logger.error("Database error while fetching all posts: %s", e)
@@ -54,7 +56,12 @@ def get_post_by_id(db: Session, post_id: int) -> Optional[Post]:
         logger.warning("Invalid post_id: %s (must be > 0)", post_id)
         return None
     try:
-        post = db.query(Post).filter(Post.id == post_id).first()
+        post = (
+            db.query(Post)
+            .options(joinedload(Post.author))
+            .filter(Post.id == post_id)
+            .first()
+        )
         if not post:
             logger.info("Post with id %s not found", post_id)
         return post
@@ -71,7 +78,12 @@ def get_posts_paginated(db: Session, offset: int, limit: int) -> List[Post]:
 
     try:
         posts: List[Post] = (
-            db.query(Post).order_by(Post.id).offset(offset).limit(limit).all()
+            db.query(Post)
+            .options(joinedload(Post.author))
+            .order_by(Post.id)
+            .offset(offset)
+            .limit(limit)
+            .all()
         )
         return posts
     except SQLAlchemyError as e:
