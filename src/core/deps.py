@@ -6,12 +6,14 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from db.repositories.user_repository import get_user_by_id
-from .jwt import decode_token, validate_typ
+from core.jwt import decode_token, validate_typ
 
+# HTTP Bearer scheme (no auto_error to control 401 shape)
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
+    """Extract Bearer token from Authorization header or raise 401."""
     if (
         credentials is None
         or not credentials.scheme
@@ -37,11 +39,11 @@ def get_current_user(
     db: Annotated[Session, Depends(get_db)],
 ):
     """
-    Зависимость FastAPI:
-    - Извлекает Bearer access токен
-    - Декодирует и проверяет подпись/exp
-    - Проверяет typ=access
-    - Загружает пользователя из БД
+    FastAPI dependency that:
+    - Extracts Bearer access token
+    - Decodes and validates signature/exp
+    - Ensures typ=access
+    - Loads user from DB and returns ORM User
     """
     token = _extract_bearer_token(credentials)
     decoded = decode_token(token)
@@ -70,5 +72,16 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+def require_admin(user=Depends(get_current_user)):
+    """Require admin role. Returns user if role == 'admin' else 403."""
+    role = getattr(user, "role", "user")
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
         )
     return user
