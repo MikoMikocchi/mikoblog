@@ -145,6 +145,7 @@ class UserOut(UserBase):
     """Response projection for user."""
 
     id: int = Field(..., description="User ID")
+    role: str = Field(..., pattern="^(user|admin)$", description="User role")
     created_at: datetime = Field(..., description="User creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
