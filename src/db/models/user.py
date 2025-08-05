@@ -5,12 +5,10 @@ from sqlalchemy.orm import relationship
 
 from ..database import Base
 
-# Field length constraints (avoid magic numbers)
 USERNAME_MAX_LENGTH = 50
 EMAIL_MAX_LENGTH = 100
 PASSWORD_HASH_MAX_LENGTH = 255
 
-# Commonly used indexes for efficient lookups
 USER_INDEXES = (
     # Optimize login and profile lookups by username
     Index("ix_user_username", "username"),
@@ -80,6 +78,13 @@ class User(Base):
         nullable=False,
         index=True,
         doc="Last modification timestamp",
+    )
+
+    role = Column(
+        String(16),
+        nullable=False,
+        default="user",
+        doc="User role: 'user' or 'admin'",
     )
 
     posts = relationship(
