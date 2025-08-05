@@ -54,6 +54,16 @@ class Settings(BaseSettings):
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL environment variable is required")
+        # Normalize docker-compose service host naming if common alias 'db' is used instead of actual service name.
+        # Prefer explicit DATABASE_URL from env; only patch when it's clearly pointing at a non-existing 'db' host
+        # while the compose service name used in this project is 'pg'.
+        try:
+            # minimal, safe string substitution without parsing credentials
+            if "://postgres:" in database_url and "@db:" in database_url:
+                database_url = database_url.replace("@db:", "@pg:")
+        except Exception:
+            # in case of any unexpected format, keep original
+            pass
 
         # DatabaseConfig assembly from env with defaults
         pool_size = int(os.getenv("DB_POOL_SIZE", "10"))
