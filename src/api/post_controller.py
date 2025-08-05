@@ -7,6 +7,7 @@ import services.post_service
 from db.database import get_db
 from schemas.responses import SuccessResponse, PaginatedResponse
 from schemas.posts import PostOut
+from core.deps import get_current_user  # direct import for clarity and typing
 
 posts_router = APIRouter(
     prefix="/posts",
@@ -49,9 +50,13 @@ async def get_post(post_id: int, db: Session = Depends(get_db)):
     response_model_exclude_none=True,
 )
 async def create_post(
-    db: Session = Depends(get_db), post_data: posts.PostCreate = Body(...)
+    db: Session = Depends(get_db),
+    post_data: posts.PostCreate = Body(...),
+    current_user=Depends(get_current_user),  # auth required
 ):
-    return services.post_service.create_post(db=db, post_data=post_data)
+    return services.post_service.create_post(
+        db=db, post_data=post_data, current_user=current_user
+    )
 
 
 @posts_router.patch("/{post_id}/title", response_model=SuccessResponse[PostOut])
@@ -59,9 +64,10 @@ async def update_title(
     post_id: int,
     db: Session = Depends(get_db),
     payload: posts.PostTitleUpdate = Body(...),
+    current_user=Depends(get_current_user),
 ):
     return services.post_service.update_title(
-        db=db, post_id=post_id, title=payload.title
+        db=db, post_id=post_id, title=payload.title, current_user=current_user
     )
 
 
@@ -70,9 +76,10 @@ async def update_content(
     post_id: int,
     db: Session = Depends(get_db),
     payload: posts.PostContentUpdate = Body(...),
+    current_user=Depends(get_current_user),
 ):
     return services.post_service.update_content(
-        db=db, post_id=post_id, content=payload.content
+        db=db, post_id=post_id, content=payload.content, current_user=current_user
     )
 
 
@@ -85,5 +92,8 @@ async def update_content(
 async def delete_post(
     post_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    return services.post_service.delete_post(db=db, post_id=post_id)
+    return services.post_service.delete_post(
+        db=db, post_id=post_id, current_user=current_user
+    )

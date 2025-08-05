@@ -1,6 +1,3 @@
-from datetime import timedelta
-from typing import Annotated
-
 from fastapi import APIRouter, Body, Depends, Request, Response, status, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,41 +7,11 @@ from schemas.responses import SuccessResponse
 from schemas.users import UserOut
 from services import auth_service
 
+from .utils.cookies import set_refresh_cookie, clear_refresh_cookie
+from .utils.request_context import extract_client, get_refresh_cookie
+from core.jwt import decode_token, validate_typ
+
 auth_router = APIRouter(prefix="/auth", tags=["Auth"])
-
-# Cookie settings for refresh token
-REFRESH_COOKIE_NAME = "__Host-rt"
-REFRESH_COOKIE_PATH = "/auth"
-REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
-
-
-def set_refresh_cookie(response: Response, refresh_jwt: str) -> None:
-    """
-    Set HTTP-only, Secure, SameSite=strict refresh cookie as agreed.
-    Domain is not set (host-only). Path is /auth.
-    """
-    response.set_cookie(
-        key=REFRESH_COOKIE_NAME,
-        value=refresh_jwt,
-        max_age=REFRESH_COOKIE_MAX_AGE,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path=REFRESH_COOKIE_PATH,
-    )
-
-
-def clear_refresh_cookie(response: Response) -> None:
-    """Clear refresh cookie by setting Max-Age=0 on the same path."""
-    response.set_cookie(
-        key=REFRESH_COOKIE_NAME,
-        value="",
-        max_age=0,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        path=REFRESH_COOKIE_PATH,
-    )
 
 
 @auth_router.post(
@@ -70,14 +37,7 @@ async def login(
     payload: AuthLogin = Body(...),
     db: Session = Depends(get_db),
 ):
-    user_agent = request.headers.get("user-agent")
-    # Prefer X-Forwarded-For if present (behind proxy), fallback to client.host
-    ip = (
-        request.headers.get("x-forwarded-for") or request.client.host
-        if request.client
-        else None
-    )
-
+    user_agent, ip = extract_client(request)
     data, refresh_jwt = auth_service.login(
         db=db, payload=payload, user_agent=user_agent, ip=ip
     )
@@ -92,20 +52,8 @@ async def login(
     response_model_exclude_none=True,
 )
 async def refresh(request: Request, response: Response, db: Session = Depends(get_db)):
-    refresh_jwt = request.cookies.get(REFRESH_COOKIE_NAME)
-    if not refresh_jwt:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing refresh cookie",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_agent = request.headers.get("user-agent")
-    ip = (
-        request.headers.get("x-forwarded-for") or request.client.host
-        if request.client
-        else None
-    )
+    refresh_jwt = get_refresh_cookie(request)
+    user_agent, ip = extract_client(request)
 
     data, new_refresh = auth_service.refresh(
         db=db, refresh_jwt=refresh_jwt, user_agent=user_agent, ip=ip
@@ -120,9 +68,8 @@ async def refresh(request: Request, response: Response, db: Session = Depends(ge
     summary="Logout from current session",
 )
 async def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    refresh_jwt = request.cookies.get(REFRESH_COOKIE_NAME)
+    refresh_jwt = request.cookies.get("__Host-rt")
     if not refresh_jwt:
-        # Idempotent logout: still clear cookie to ensure client state is clean
         clear_refresh_cookie(response)
         return SuccessResponse[str].ok("Logged out")
 
@@ -141,26 +88,13 @@ async def logout_all(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    # For security, require refresh cookie to verify the user identity context.
-    refresh_jwt = request.cookies.get(REFRESH_COOKIE_NAME)
-    if not refresh_jwt:
-        clear_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing refresh cookie",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    refresh_jwt = get_refresh_cookie(request)
 
-    # Decode refresh locally just to obtain user id; auth_service.refresh already does stricter checks,
-    # but here we only need to identify the user for logout-all. We reuse the service by first refreshing decode.
-    # To avoid duplication, perform a lightweight decode inline via auth_service.refresh dependencies:
-    # Use core.jwt.decode_token to read sub without rotation.
-    from core.jwt import decode_token, validate_typ  # local import to avoid circulars
-
+    # Decode locally to get user id; service performs stricter checks
     decoded = decode_token(refresh_jwt)
     validate_typ(decoded, expected_typ="refresh")
     sub = decoded.get("sub")
-    if not sub:
+    if sub is None:
         clear_refresh_cookie(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

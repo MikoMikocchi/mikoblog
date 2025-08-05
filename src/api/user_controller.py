@@ -1,7 +1,7 @@
-# api/user_controller.py
 from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from core.deps import require_admin
 from db.database import get_db
 from schemas.responses import PaginatedResponse, SuccessResponse
 from schemas.users import (
@@ -64,11 +64,14 @@ async def create_user(user_data: UserCreate = Body(...), db: Session = Depends(g
     "/{user_id}",
     response_model=SuccessResponse[UserOut],
     summary="Partially update user",
-    description="Update one or several fields for a user. Enforces uniqueness and hashes password.",
+    description="Update one or several fields for a user. Enforces uniqueness and hashes password. Admin only.",
     response_model_exclude_none=True,
 )
 async def update_user_patch(
-    user_id: int, patch: UserUpdate = Body(...), db: Session = Depends(get_db)
+    user_id: int,
+    patch: UserUpdate = Body(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
 ):
     return user_service.update_user_patch(db=db, user_id=user_id, patch=patch)
 
@@ -77,11 +80,14 @@ async def update_user_patch(
     "/{user_id}",
     response_model=SuccessResponse[UserOut],
     summary="Replace user (PUT)",
-    description="Full replacement of user fields. Enforces uniqueness and hashes password.",
+    description="Full replacement of user fields. Enforces uniqueness and hashes password. Admin only.",
     response_model_exclude_none=True,
 )
 async def replace_user(
-    user_id: int, payload: UserReplace = Body(...), db: Session = Depends(get_db)
+    user_id: int,
+    payload: UserReplace = Body(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
 ):
     return user_service.replace_user_put(db=db, user_id=user_id, payload=payload)
 
@@ -90,7 +96,11 @@ async def replace_user(
     "/{user_id}",
     response_model=SuccessResponse[str],
     summary="Delete user",
-    description="Delete a user by ID. Returns a confirmation message.",
+    description="Delete a user by ID. Returns a confirmation message. Admin only.",
 )
-async def delete_user(user_id: int, db: Session = Depends(get_db)):
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
     return user_service.delete_user(db=db, user_id=user_id)
