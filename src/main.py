@@ -33,7 +33,8 @@ async def lifespan(app: FastAPI):
             "yes",
         )
         if db_check_env:
-            if check_db_connection():
+            ok = await check_db_connection()
+            if ok:
                 logger.info("Database connection verified")
             else:
                 logger.error("Database connection failed")
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down MikoBlog API")
 
     try:
-        close_db_connections()
+        await close_db_connections()
         logger.info("Database connections closed")
         logger.info("Application shutdown completed")
 

@@ -3,7 +3,7 @@ import os
 import re
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
 from core.jwt import decode_token, encode_access_token, encode_refresh_token, make_jti, validate_typ
@@ -23,7 +23,7 @@ def _compute_access_expires_in_seconds() -> int:
     return minutes * 60
 
 
-def register(db: Session, payload: AuthRegister) -> SuccessResponse[UserOut]:
+async def register(db: AsyncSession, payload: AuthRegister) -> SuccessResponse[UserOut]:
     """
     Create a new user and return UserOut.
     Performs optimistic uniqueness checks and hashes the password.
@@ -53,16 +53,16 @@ def register(db: Session, payload: AuthRegister) -> SuccessResponse[UserOut]:
         raise ValidationError("Password does not meet complexity requirements")
 
     # Optimistic checks before attempting INSERT
-    if user_repository.get_user_by_username(db, username):
+    if await user_repository.get_user_by_username(db, username):
         raise ConflictError("Username already registered")
-    if user_repository.get_user_by_email(db, email_clean):
+    if await user_repository.get_user_by_email(db, email_clean):
         raise ConflictError("Email already registered")
 
     hashed_password = get_password_hash(pwd)
 
     # Attempt create; handle unique races deterministically
     try:
-        db_user = user_repository.create_user(
+        db_user = await user_repository.create_user(
             db=db,
             username=username,
             email=email_clean,
@@ -73,23 +73,23 @@ def register(db: Session, payload: AuthRegister) -> SuccessResponse[UserOut]:
     except Exception as e:
         msg = str(e).lower()
         if "lock timeout" in msg or "locknotavailable" in msg or "could not obtain lock" in msg:
-            if user_repository.get_user_by_username(db, username) or user_repository.get_user_by_email(db, email_clean):
+            if (await user_repository.get_user_by_username(db, username)) or (await user_repository.get_user_by_email(db, email_clean)):
                 raise ConflictError("Username or email already registered") from e
         raise
 
     return SuccessResponse[UserOut].ok(UserOut.model_validate(db_user))
 
 
-def _resolve_user_by_login(db: Session, username_or_email: str):
+async def _resolve_user_by_login(db: AsyncSession, username_or_email: str):
     # Repository functions return ORM User or None.
-    user = user_repository.get_user_by_username(db, username_or_email)
+    user = await user_repository.get_user_by_username(db, username_or_email)
     if not user:
-        user = user_repository.get_user_by_email(db, username_or_email)
+        user = await user_repository.get_user_by_email(db, username_or_email)
     return user
 
 
-def login(
-    db: Session,
+async def login(
+    db: AsyncSession,
     payload: AuthLogin,
     *,
     user_agent: str | None,
@@ -100,7 +100,7 @@ def login(
       - SuccessResponse[TokenPayload] (access token info)
       - refresh_jwt string (to be set in cookie by controller)
     """
-    user = _resolve_user_by_login(db, payload.username_or_email)
+    user = await _resolve_user_by_login(db, payload.username_or_email)
     if not user:
         raise AuthenticationError("Invalid credentials")
     # Help static analyzers: assert presence of id attr, then set local user_id
@@ -116,7 +116,7 @@ def login(
     refresh_expires = now + timedelta(days=7)
     jti = make_jti()
 
-    rt_repo.create(
+    await rt_repo.create(
         db=db,
         user_id=user_id,
         jti=jti,
@@ -137,8 +137,8 @@ def login(
     return SuccessResponse[TokenPayload].ok(payload_out), refresh
 
 
-def refresh(
-    db: Session,
+async def refresh(
+    db: AsyncSession,
     refresh_jwt: str,
     *,
     user_agent: str | None,
@@ -165,14 +165,14 @@ def refresh(
         raise AuthenticationError("Invalid refresh token subject") from None
 
     # Check record state
-    if not rt_repo.is_active(db, jti):
+    if not await rt_repo.is_active(db, jti):
         raise AuthenticationError("Refresh token is not active")
 
     # Rotate
     now = _utcnow()
     new_jti = make_jti()
     new_expires = now + timedelta(days=7)
-    new_record = rt_repo.rotate(
+    new_record = await rt_repo.rotate(
         db=db,
         old_jti=jti,
         new_jti=new_jti,
@@ -197,7 +197,7 @@ def refresh(
     return SuccessResponse[TokenPayload].ok(payload_out), new_refresh
 
 
-def logout(db: Session, refresh_jwt: str) -> SuccessResponse[str]:
+async def logout(db: AsyncSession, refresh_jwt: str) -> SuccessResponse[str]:
     """
     Revoke refresh token from provided JWT.
     """
@@ -207,13 +207,13 @@ def logout(db: Session, refresh_jwt: str) -> SuccessResponse[str]:
     if not jti:
         raise AuthenticationError("Invalid refresh token")
 
-    rt_repo.revoke_by_jti(db=db, jti=jti)
+    await rt_repo.revoke_by_jti(db=db, jti=jti)
     return SuccessResponse[str].ok("Logged out")
 
 
-def logout_all(db: Session, user_id: int) -> SuccessResponse[str]:
+async def logout_all(db: AsyncSession, user_id: int) -> SuccessResponse[str]:
     """
     Revoke all active refresh tokens for the specified user.
     """
-    rt_repo.revoke_all_for_user(db=db, user_id=user_id)
+    await rt_repo.revoke_all_for_user(db=db, user_id=user_id)
     return SuccessResponse[str].ok("Logged out from all sessions")

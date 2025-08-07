@@ -1,11 +1,11 @@
-from collections.abc import Generator
-from contextlib import contextmanager
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
 import logging
 
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
-from sqlalchemy.pool import QueuePool
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base
 
 from core.config import settings
 
@@ -16,96 +16,74 @@ Base = declarative_base()
 if not settings.database:
     raise RuntimeError("Database configuration not initialized")
 
-engine = create_engine(
-    settings.database.url,
+
+def _to_async_dsn(url: str) -> str:
+    if "+asyncpg" in url:
+        return url
+    if url.startswith("postgresql+psycopg2://"):
+        return url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+ASYNC_DATABASE_URL = _to_async_dsn(settings.database.url)
+
+engine: AsyncEngine = create_async_engine(
+    ASYNC_DATABASE_URL,
     echo=settings.database.echo,
     pool_size=settings.database.pool_size,
     max_overflow=settings.database.max_overflow,
-    pool_timeout=settings.database.pool_timeout,
     pool_pre_ping=settings.database.pool_pre_ping,
-    poolclass=QueuePool,
+    pool_timeout=settings.database.pool_timeout,
     pool_recycle=3600,
-    connect_args={
-        "options": "-c timezone=utc",
-        "application_name": "mikoblog_api",
-    },
 )
 
-SessionLocal = sessionmaker(
+SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,
     autoflush=False,
-    autocommit=False,
     expire_on_commit=False,
 )
 
 
-def get_db() -> Generator[Session]:
-    db = SessionLocal()
+async def get_db() -> AsyncGenerator[AsyncSession]:
+    async with SessionLocal() as session:
+        try:
+            logger.debug("Async database session created")
+            yield session
+        except Exception as e:
+            try:
+                await session.rollback()
+            except Exception:
+                pass
+            logger.error("Error in async DB session: %s", e)
+            raise
+        finally:
+            logger.debug("Async database session closed")
+
+
+async def check_db_connection() -> bool:
     try:
-        logger.debug("Database session created")
-        yield db
-    except SQLAlchemyError as e:
-        logger.error(f"Database error in session: {e}")
-        db.rollback()
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in database session: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
-        logger.debug("Database session closed")
-
-
-@contextmanager
-def get_db_context() -> Generator[Session]:
-    db = SessionLocal()
-    try:
-        logger.debug("Database context session created")
-        yield db
-        db.commit()
-    except SQLAlchemyError as e:
-        logger.error(f"Database error in context session: {e}")
-        db.rollback()
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in context session: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
-        logger.debug("Database context session closed")
-
-
-def check_db_connection() -> bool:
-    try:
-        with get_db_context() as db:
-            db.execute(text("SELECT 1"))
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
         logger.info("Database connection is healthy")
         return True
     except Exception as e:
-        logger.error(f"Database connection check failed: {e}")
+        logger.error("Database connection check failed: %s", e)
         return False
 
 
-def close_db_connections() -> None:
+async def close_db_connections() -> None:
     try:
-        engine.dispose()
+        await engine.dispose()
         logger.info("Database connections closed")
     except Exception as e:
-        logger.error(f"Error closing database connections: {e}")
+        logger.error("Error closing database connections: %s", e)
 
 
-def get_db_info() -> dict:
+async def get_db_info() -> dict:
     try:
-        pool = engine.pool
-        return {
-            "pool_size": getattr(pool, "_pool_size", "N/A"),
-            "checked_in": getattr(pool, "_checked_in", "N/A"),
-            "checked_out": getattr(pool, "_checked_out", "N/A"),
-            "overflow": getattr(pool, "_overflow", "N/A"),
-            "status": "healthy",
-        }
+        return {"status": "healthy"}
     except Exception as e:
-        logger.error(f"Error getting database info: {e}")
+        logger.error("Error getting database info: %s", e)
         return {"status": "error", "message": str(e)}
