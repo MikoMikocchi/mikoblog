@@ -1,0 +1,83 @@
+name: CI - Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mikoblog_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d mikoblog_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    strategy:
+      matrix:
+        python-version: [ "3.11", "3.12" ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Configure Poetry (no virtualenv)
+        run: |
+          poetry config virtualenvs.create false
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --no-ansi
+
+      - name: Prepare test environment
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+        run: |
+          # Ensure test keys exist (repo contains tests/keys/*.pem)
+          test -f tests/keys/jwt_private.pem
+          test -f tests/keys/jwt_public.pem
+          # Print Python and pip versions for debugging
+          python --version
+          pip --version
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/mikoblog_test
+          SECRET_KEY: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+          JWT_PRIVATE_KEY_PATH: tests/keys/jwt_private.pem
+          JWT_PUBLIC_KEY_PATH: tests/keys/jwt_public.pem
+          JWT_ACCESS_MINUTES: "1"
+          JWT_REFRESH_DAYS: "1"
+          DB_CHECK_ON_START: "false"
+        run: |
+          pytest -q
+
+      - name: Upload coverage xml
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
