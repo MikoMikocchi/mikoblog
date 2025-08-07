@@ -1,6 +1,7 @@
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
 from schemas.users import UserOut
 
 
@@ -11,13 +12,19 @@ class AuthRegister(BaseModel):
     email: EmailStr = Field(..., description="Email")
     password: str = Field(..., min_length=12, max_length=128, description="Password")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _reject_whitespace_in_email(cls, v):
+        s = str(v)
+        if s != s.strip():
+            raise ValueError("Invalid email address")
+        return v
+
 
 class AuthLogin(BaseModel):
     """Login payload."""
 
-    username_or_email: str = Field(
-        ..., min_length=3, max_length=100, description="Username or email"
-    )
+    username_or_email: str = Field(..., min_length=3, max_length=100, description="Username or email")
     password: str = Field(..., min_length=1, max_length=128, description="Password")
 
 

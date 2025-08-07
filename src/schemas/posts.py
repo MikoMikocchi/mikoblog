@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator
+
 from .users import UserOut
 
 MIN_TITLE_LENGTH = 5
@@ -49,9 +49,7 @@ class ContentValidationMixin:
     def validate_content(cls, content: str) -> str:
         content = sanitize_content(content)
         if count_words(content) < MIN_WORDS_IN_CONTENT:
-            raise ValueError(
-                f"Content must contain at least {MIN_WORDS_IN_CONTENT} words"
-            )
+            raise ValueError(f"Content must contain at least {MIN_WORDS_IN_CONTENT} words")
         return content
 
 
@@ -68,9 +66,7 @@ class PostBase(TitleValidationMixin, ContentValidationMixin, BaseModel):
         max_length=MAX_CONTENT_LENGTH,
         description="Post content between 10 and 50,000 characters",
     )
-    is_published: bool = Field(
-        default=True, description="Whether the post is published"
-    )
+    is_published: bool = Field(default=True, description="Whether the post is published")
 
 
 class PostCreate(PostBase):
@@ -78,19 +74,19 @@ class PostCreate(PostBase):
 
 
 class PostUpdate(TitleValidationMixin, ContentValidationMixin, BaseModel):
-    title: Optional[str] = Field(
+    title: str | None = Field(
         None,
         min_length=MIN_TITLE_LENGTH,
         max_length=MAX_TITLE_LENGTH,
         description="New post title",
     )
-    content: Optional[str] = Field(
+    content: str | None = Field(
         None,
         min_length=MIN_CONTENT_LENGTH,
         max_length=MAX_CONTENT_LENGTH,
         description="New post content",
     )
-    is_published: Optional[bool] = Field(None, description="New publication status")
+    is_published: bool | None = Field(None, description="New publication status")
 
 
 class PostOut(PostBase):
@@ -99,10 +95,8 @@ class PostOut(PostBase):
     author: UserOut = Field(..., description="Post author information")
     created_at: datetime = Field(..., description="Post creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
-    word_count: Optional[int] = Field(None, description="Number of words in content")
-    reading_time: Optional[int] = Field(
-        None, description="Estimated reading time in minutes"
-    )
+    word_count: int | None = Field(None, description="Number of words in content")
+    reading_time: int | None = Field(None, description="Estimated reading time in minutes")
 
     model_config = {"from_attributes": True}
 
@@ -150,15 +144,9 @@ class PostStatistics(BaseModel):
     total_posts: int = Field(..., description="Total number of posts")
     published_posts: int = Field(..., description="Number of published posts")
     draft_posts: int = Field(..., description="Number of draft posts")
-    author_id: Optional[int] = Field(
-        None, description="Author ID for author-specific stats"
-    )
-    average_words_per_post: Optional[float] = Field(
-        None, description="Average words per post"
-    )
-    most_active_author: Optional[UserOut] = Field(
-        None, description="Most active author"
-    )
+    author_id: int | None = Field(None, description="Author ID for author-specific stats")
+    average_words_per_post: float | None = Field(None, description="Average words per post")
+    most_active_author: UserOut | None = Field(None, description="Most active author")
 
 
 class SortOption(str, Enum):
@@ -169,9 +157,7 @@ class SortOption(str, Enum):
 
 class PostSearchQuery(BaseModel):
     query: str = Field(..., min_length=2, max_length=100, description="Search query")
-    published_only: bool = Field(
-        default=True, description="Search only published posts"
-    )
-    author_id: Optional[int] = Field(None, gt=0, description="Filter by author ID")
+    published_only: bool = Field(default=True, description="Search only published posts")
+    author_id: int | None = Field(None, gt=0, description="Filter by author ID")
     limit: int = Field(default=10, ge=1, le=50, description="Maximum number of results")
     sort: SortOption = Field(default=SortOption.newest, description="Sorting option")

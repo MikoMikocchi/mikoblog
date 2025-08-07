@@ -1,27 +1,19 @@
-# services/user_service.py
 import logging
-from typing import Optional
 
-from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictError, NotFoundError, ValidationError
+from core.exceptions import BlogException, ConflictError, NotFoundError, ValidationError
 from core.security import get_password_hash
 from db.repositories import user_repository
 from schemas.responses import PaginatedResponse, PaginationMeta, SuccessResponse
-from schemas.users import (
-    UserCreate,
-    UserOut,
-    UserQuery,
-    UserReplace,
-    UserUpdate,
-)
+from schemas.users import UserCreate, UserOut, UserQuery, UserReplace, UserUpdate
 
 logger = logging.getLogger(__name__)
 
 
 def get_user_by_id(db: Session, user_id: int) -> SuccessResponse[UserOut]:
-    """Get single user by id."""
+    """Get a single user by ID."""
     user = user_repository.get_user_by_id(db, user_id)
     if user is None:
         logger.info("User %s not found", user_id)
@@ -33,7 +25,7 @@ def list_users(
     db: Session,
     page: int = 1,
     limit: int = 10,
-    query: Optional[UserQuery] = None,
+    query: UserQuery | None = None,
 ) -> PaginatedResponse[UserOut]:
     """List users with pagination and optional exact filters."""
     if page < 1:
@@ -45,11 +37,7 @@ def list_users(
     q_email = query.email if query else None
 
     offset = (page - 1) * limit
-    items_orm = list(
-        user_repository.get_users_paginated(
-            db=db, offset=offset, limit=limit, username=q_username, email=q_email
-        )
-    )
+    items_orm = list(user_repository.get_users_paginated(db=db, offset=offset, limit=limit, username=q_username, email=q_email))
     total = user_repository.count_users(db=db, username=q_username, email=q_email)
 
     items = [UserOut.model_validate(u) for u in items_orm]
@@ -67,6 +55,7 @@ def list_users(
 
 def create_user(db: Session, user_data: UserCreate) -> SuccessResponse[UserOut]:
     """Create new user with uniqueness checks and password hashing."""
+
     try:
         if user_repository.get_user_by_username(db, user_data.username):
             logger.warning("Username '%s' already exists", user_data.username)
@@ -78,62 +67,55 @@ def create_user(db: Session, user_data: UserCreate) -> SuccessResponse[UserOut]:
 
         hashed_password = get_password_hash(user_data.password)
 
-        db_user = user_repository.create_user(
-            db=db,
-            username=user_data.username,
-            email=user_data.email,
-            hashed_password=hashed_password,
-        )
+        try:
+            db_user = user_repository.create_user(
+                db=db,
+                username=user_data.username,
+                email=user_data.email,
+                hashed_password=hashed_password,
+            )
+        except IntegrityError as ie:
+            logger.warning("IntegrityError on user create (username/email uniqueness): %s", ie)
+            raise ConflictError("Username or email already registered") from ie
 
         return SuccessResponse[UserOut].ok(UserOut.model_validate(db_user))
 
-    except HTTPException:
+    except BlogException:
         raise
-
-    except ConflictError:
-        raise
-
     except Exception as e:
         logger.error("Unexpected error while creating user: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
-        )
+        raise ValidationError("Unexpected error while creating user") from e
 
 
 def _ensure_unique_on_change(
     db: Session,
     *,
     user_id: int,
-    new_username: Optional[str],
-    new_email: Optional[str],
+    new_username: str | None,
+    new_email: str | None,
 ) -> None:
     """Ensure username/email uniqueness if changed for a specific user."""
     if new_username is not None:
         existing = user_repository.get_user_by_username(db, new_username)
-        if existing is not None and int(getattr(existing, "id")) != user_id:
+        if existing is not None and int(getattr(existing, "id", 0)) != int(user_id):
             raise ConflictError("Username already registered")
     if new_email is not None:
         existing = user_repository.get_user_by_email(db, new_email)
-        if existing is not None and int(getattr(existing, "id")) != user_id:
+        if existing is not None and int(getattr(existing, "id", 0)) != int(user_id):
             raise ConflictError("Email already registered")
 
 
-def update_user_patch(
-    db: Session, user_id: int, patch: UserUpdate
-) -> SuccessResponse[UserOut]:
-    """Partially update user. Hash password if provided; enforce uniqueness."""
+def update_user_patch(db: Session, user_id: int, patch: UserUpdate) -> SuccessResponse[UserOut]:
+    """Partially update a user. Hash password if provided; enforce uniqueness."""
     user = user_repository.get_user_by_id(db, user_id)
     if not user:
         raise NotFoundError(f"User with id {user_id} not found")
 
     new_username = patch.username if patch.username is not None else None
     new_email = patch.email if patch.email is not None else None
-    _ensure_unique_on_change(
-        db, user_id=user_id, new_username=new_username, new_email=new_email
-    )
+    _ensure_unique_on_change(db, user_id=user_id, new_username=new_username, new_email=new_email)
 
-    hashed_password: Optional[str] = None
+    hashed_password: str | None = None
     if patch.password is not None:
         hashed_password = get_password_hash(patch.password)
 
@@ -150,17 +132,13 @@ def update_user_patch(
     return SuccessResponse[UserOut].ok(UserOut.model_validate(updated))
 
 
-def replace_user_put(
-    db: Session, user_id: int, payload: UserReplace
-) -> SuccessResponse[UserOut]:
+def replace_user_put(db: Session, user_id: int, payload: UserReplace) -> SuccessResponse[UserOut]:
     """Full replacement update (PUT)."""
     user = user_repository.get_user_by_id(db, user_id)
     if not user:
         raise NotFoundError(f"User with id {user_id} not found")
 
-    _ensure_unique_on_change(
-        db, user_id=user_id, new_username=payload.username, new_email=payload.email
-    )
+    _ensure_unique_on_change(db, user_id=user_id, new_username=payload.username, new_email=payload.email)
 
     hashed_password = get_password_hash(payload.password)
 
@@ -178,7 +156,7 @@ def replace_user_put(
 
 
 def delete_user(db: Session, user_id: int) -> SuccessResponse[str]:
-    """Delete user by id."""
+    """Delete a user by ID."""
     user = user_repository.get_user_by_id(db, user_id)
     if not user:
         raise NotFoundError(f"User with id {user_id} not found")

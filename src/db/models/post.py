@@ -1,15 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Text,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-)
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
@@ -118,9 +109,7 @@ class Post(Base):
         """Return the formal string representation for debugging."""
         title_value = getattr(self, "title", None)
         if isinstance(title_value, str) and title_value:
-            title_repr = (
-                title_value[:30] + "..." if len(title_value) > 30 else title_value
-            )
+            title_repr = title_value[:30] + "..." if len(title_value) > 30 else title_value
         else:
             title_repr = ""
         return f"<Post(id={self.id}, title={title_repr!r}, author_id={self.author_id})>"
@@ -128,9 +117,7 @@ class Post(Base):
     def __str__(self) -> str:
         """Return a user-friendly string describing the post."""
         status = "Published" if getattr(self, "is_published", False) else "Draft"
-        author_name = (
-            getattr(self.author, "username", "Unknown") if self.author else "Unknown"
-        )
+        author_name = getattr(self.author, "username", "Unknown") if self.author else "Unknown"
         title = getattr(self, "title", "") or ""
         return f"Post '{title}' by {author_name} ({status})"
 

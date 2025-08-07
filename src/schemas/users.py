@@ -1,8 +1,6 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
-
 
 USERNAME_PATTERN = r"^[a-zA-Z0-9_-]+$"
 MIN_USERNAME_LENGTH = 3
@@ -26,14 +24,17 @@ def is_strong_password(password: str) -> bool:
 def validate_password(password: str) -> str:
     if not is_strong_password(password):
         raise ValueError(
-            "Password must be at least 12 characters long and contain at least one uppercase letter, "
+            "Password must be at least 12 characters long and contain at least one uppercase letter"
             "one lowercase letter, one digit, and one special character."
         )
     return password
 
 
 def validate_username(username: str) -> str:
-    if username.lower() in RESERVED_USERNAMES:
+    uname = (username or "").strip()
+    if uname.lower() in RESERVED_USERNAMES:
+        raise ValueError("Username not allowed")
+    if uname.isdigit():
         raise ValueError("Username not allowed")
     return username
 
@@ -49,6 +50,24 @@ class UserBase(BaseModel):
         description="Username containing only letters, numbers, underscores, and hyphens",
     )
     email: EmailStr = Field(..., description="Valid email address")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _reject_whitespace_in_email(cls, v):
+        s = str(v)
+        if s != s.strip():
+            raise ValueError("Invalid email address")
+        return v
+
+    @field_validator("username")
+    @classmethod
+    def _reserved_and_digit_only_guard(cls, v: str) -> str:
+        uname = (v or "").strip()
+        if uname.lower() in RESERVED_USERNAMES:
+            raise ValueError("Username not allowed")
+        if uname.isdigit():
+            raise ValueError("Username not allowed")
+        return v
 
 
 class UserCreate(UserBase):
@@ -100,28 +119,28 @@ class UserReplace(BaseModel):
 class UserQuery(BaseModel):
     """Query filters for listing users with exact matches."""
 
-    username: Optional[str] = Field(
+    username: str | None = Field(
         None,
         min_length=MIN_USERNAME_LENGTH,
         max_length=MAX_USERNAME_LENGTH,
         pattern=USERNAME_PATTERN,
         description="Exact username filter",
     )
-    email: Optional[EmailStr] = Field(None, description="Exact email filter")
+    email: EmailStr | None = Field(None, description="Exact email filter")
 
 
 class UserUpdate(BaseModel):
     """Partial update (PATCH)."""
 
-    username: Optional[str] = Field(
+    username: str | None = Field(
         None,
         min_length=MIN_USERNAME_LENGTH,
         max_length=MAX_USERNAME_LENGTH,
         pattern=USERNAME_PATTERN,
         description="New username",
     )
-    email: Optional[EmailStr] = Field(None, description="New email address")
-    password: Optional[str] = Field(
+    email: EmailStr | None = Field(None, description="New email address")
+    password: str | None = Field(
         None,
         min_length=MIN_PASSWORD_LENGTH,
         max_length=MAX_PASSWORD_LENGTH,
@@ -129,13 +148,13 @@ class UserUpdate(BaseModel):
     )
 
     @field_validator("password")
-    def validate_password_strength(cls, v: Optional[str]) -> Optional[str]:
+    def validate_password_strength(cls, v: str | None) -> str | None:
         if v is None:
             return v
         return validate_password(v)
 
     @field_validator("username")
-    def validate_reserved_usernames(cls, v: Optional[str]) -> Optional[str]:
+    def validate_reserved_usernames(cls, v: str | None) -> str | None:
         if v is None:
             return v
         return validate_username(v)
@@ -147,18 +166,14 @@ class UserOut(UserBase):
     id: int = Field(..., description="User ID")
     role: str = Field(..., pattern="^(user|admin)$", description="User role")
     created_at: datetime = Field(..., description="User creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+    updated_at: datetime | None = Field(None, description="Last update timestamp")
 
     model_config = {"from_attributes": True}
 
 
 class UserLogin(BaseModel):
-    username_or_email: str = Field(
-        ..., min_length=3, max_length=100, description="Username or email address"
-    )
-    password: str = Field(
-        ..., min_length=1, max_length=MAX_PASSWORD_LENGTH, description="User password"
-    )
+    username_or_email: str = Field(..., min_length=3, max_length=100, description="Username or email address")
+    password: str = Field(..., min_length=1, max_length=MAX_PASSWORD_LENGTH, description="User password")
 
 
 class UserPasswordChange(BaseModel):
@@ -181,7 +196,7 @@ class UserPasswordChange(BaseModel):
 
 
 class UserProfile(UserOut):
-    post_count: Optional[int] = Field(None, description="Number of posts by user")
+    post_count: int | None = Field(None, description="Number of posts by user")
     is_active: bool = Field(default=True, description="Whether user account is active")
 
 

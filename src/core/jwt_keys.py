@@ -1,12 +1,11 @@
-import os
 import functools
-from typing import Tuple
+import os
 
 from .config import settings
 
 
 @functools.lru_cache(maxsize=1)
-def load_keypair() -> Tuple[str, str]:
+def load_keypair() -> tuple[str, str]:
     """
     Load RS256 key pair (private, public) from PEM files defined by environment variables.
     Returns PEM contents as strings. Results are cached in memory.
@@ -30,15 +29,12 @@ def load_keypair() -> Tuple[str, str]:
     if not os.path.exists(public_path):
         raise FileNotFoundError(f"JWT public key not found at path: {public_path}")
 
-    with open(private_path, "r", encoding="utf-8") as f:
+    with open(private_path, encoding="utf-8") as f:
         private_key = f.read()
-    with open(public_path, "r", encoding="utf-8") as f:
+    with open(public_path, encoding="utf-8") as f:
         public_key = f.read()
 
-    if (
-        "BEGIN RSA PRIVATE KEY" not in private_key
-        and "BEGIN PRIVATE KEY" not in private_key
-    ):
+    if "BEGIN RSA PRIVATE KEY" not in private_key and "BEGIN PRIVATE KEY" not in private_key:
         raise ValueError("Invalid private key PEM content")
     if "BEGIN PUBLIC KEY" not in public_key:
         raise ValueError("Invalid public key PEM content")

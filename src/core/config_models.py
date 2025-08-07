@@ -33,9 +33,7 @@ class ServerConfig(BaseModel):
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, ge=1, le=65535, description="Server port")
     reload: bool = Field(default=False, description="Enable auto-reload in development")
-    check_db_on_start: bool = Field(
-        default=True, description="Run DB connection check on startup"
-    )
+    check_db_on_start: bool = Field(default=True, description="Run DB connection check on startup")
 
 
 class LoggingConfig(BaseModel):

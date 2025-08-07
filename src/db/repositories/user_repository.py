@@ -1,8 +1,8 @@
 import logging
-from typing import Iterable, Optional
+from typing import Any, cast
 
-from sqlalchemy import and_
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import and_, text as _sql_text
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from db.models.user import User
@@ -11,7 +11,7 @@ from db.utils import transactional
 logger = logging.getLogger(__name__)
 
 
-def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
+def get_user_by_id(db: Session, user_id: int) -> User | None:
     """Return a user by primary key.
 
     Args:
@@ -34,23 +34,19 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
         raise
 
 
-def get_user_by_username(db: Session, username: str) -> Optional[User]:
+def get_user_by_username(db: Session, username: str) -> User | None:
     """Return a user by exact username."""
     try:
         return db.query(User).filter(User.username == username).first()
     except SQLAlchemyError as e:
-        logger.error(
-            "Database error while fetching user by username '%s': %s", username, e
-        )
+        logger.error("Database error while fetching user by username '%s': %s", username, e)
         raise
     except Exception as e:
-        logger.error(
-            "Unexpected error while fetching user by username '%s': %s", username, e
-        )
+        logger.error("Unexpected error while fetching user by username '%s': %s", username, e)
         raise
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
+def get_user_by_email(db: Session, email: str) -> User | None:
     """Return a user by exact email."""
     try:
         return db.query(User).filter(User.email == email).first()
@@ -62,9 +58,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
         raise
 
 
-def count_users(
-    db: Session, username: Optional[str] = None, email: Optional[str] = None
-) -> int:
+def count_users(db: Session, username: str | None = None, email: str | None = None) -> int:
     """Count users with optional exact filters.
 
     Args:
@@ -97,9 +91,9 @@ def get_users_paginated(
     db: Session,
     offset: int,
     limit: int,
-    username: Optional[str] = None,
-    email: Optional[str] = None,
-) -> Iterable[User]:
+    username: str | None = None,
+    email: str | None = None,
+) -> list[User]:
     """Return users page with optional exact filters, ordered by id ASC.
 
     Args:
@@ -110,7 +104,7 @@ def get_users_paginated(
         email: Exact email filter.
 
     Returns:
-        Iterable[User]: Users slice.
+        list[User]: Users slice.
     """
     try:
         query = db.query(User)
@@ -133,20 +127,100 @@ def get_users_paginated(
 
 @transactional
 def create_user(db: Session, username: str, email: str, hashed_password: str) -> User:
-    """Create a new user under transactional boundary."""
-    try:
-        db_user = User(username=username, email=email, hashed_password=hashed_password)
-        db.add(db_user)
-        db.flush()
-        db.refresh(db_user)
-        logger.info("Created new user with id %s, username='%s'", db_user.id, username)
-        return db_user
-    except SQLAlchemyError as e:
-        logger.error("Database error while creating user '%s': %s", username, e)
-        raise
-    except Exception as e:
-        logger.error("Unexpected error while creating user '%s': %s", username, e)
-        raise
+    """Create new user under transactional boundary using ON CONFLICT to avoid index lock waits."""
+
+    # One short retry for rare lock/deadlock on CI
+
+    while True:
+        try:
+            # Reasonable local timeouts
+            try:
+                db.execute(_sql_text("SET LOCAL lock_timeout = '1500ms'"))
+                db.execute(_sql_text("SET LOCAL statement_timeout = '2500ms'"))
+            except Exception:
+                pass
+
+            # Preflight with NOWAIT to avoid waiting on locked rows
+            preflight_sql = _sql_text(
+                """
+                SELECT 1
+                FROM users
+                WHERE username = :username OR email = :email
+                FOR KEY SHARE NOWAIT
+                LIMIT 1
+                """
+            )
+            pre = db.execute(preflight_sql, {"username": username, "email": email}).first()
+            if pre is not None:
+                raise IntegrityError(
+                    "duplicate username/email",
+                    params={},
+                    orig=Exception("unique conflict"),
+                )  # type: ignore[arg-type]
+
+            # Single insert that ignores any unique conflict; if not inserted -> conflict
+            insert_sql = _sql_text(
+                """
+                INSERT INTO users (username, email, hashed_password, created_at, updated_at, role)
+                VALUES (:username, :email, :hashed_password, NOW(), NOW(), 'user')
+                ON CONFLICT DO NOTHING
+                RETURNING id
+                """
+            )
+            row = db.execute(
+                insert_sql,
+                {
+                    "username": username,
+                    "email": email,
+                    "hashed_password": hashed_password,
+                },
+            ).fetchone()
+            if row is None:
+                # Deterministic 409 on any unique conflict (username or email)
+                raise IntegrityError(
+                    "duplicate username/email",
+                    params={},
+                    orig=Exception("unique conflict"),
+                )  # type: ignore[arg-type]
+
+            pk = int(row[0])
+            created = db.get(User, pk)
+            if created is None:
+                raise SQLAlchemyError("inserted row not found after RETURNING")
+            logger.info(
+                "Created new user with id %s, username='%s'",
+                pk,
+                username,
+            )
+            return created
+
+        except IntegrityError as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            logger.warning(
+                "IntegrityError on creating user (username=%s, email=%s): %s",
+                username,
+                email,
+                e,
+            )
+            raise
+
+        except OperationalError as e:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            # Re-raise with explicit cause to satisfy Ruff B904
+            raise IntegrityError("duplicate username/email", params={}, orig=e) from e  # type: ignore[arg-type]
+
+        except SQLAlchemyError as e:
+            logger.error("Database error while creating user '%s': %s", username, e)
+            raise
+        except Exception as e:
+            logger.error("Unexpected error while creating user '%s': %s", username, e)
+            raise
 
 
 @transactional
@@ -154,10 +228,10 @@ def update_user_partial(
     db: Session,
     user_id: int,
     *,
-    username: Optional[str] = None,
-    email: Optional[str] = None,
-    hashed_password: Optional[str] = None,
-) -> Optional[User]:
+    username: str | None = None,
+    email: str | None = None,
+    hashed_password: str | None = None,
+) -> User | None:
     """Apply partial update (PATCH) to user.
 
     Returns:
@@ -169,13 +243,14 @@ def update_user_partial(
             logger.info("Skip patch: user %s not found", user_id)
             return None
 
-        # Use SQLAlchemy's setattr to avoid static type confusion with Column descriptors
+        # Use a narrow cast to Any to avoid static type confusion with Column descriptors in type checkers
+        u = cast(Any, user)
         if username is not None:
-            setattr(user, "username", username)
+            u.username = username
         if email is not None:
-            setattr(user, "email", email)
+            u.email = email
         if hashed_password is not None:
-            setattr(user, "hashed_password", hashed_password)
+            u.hashed_password = hashed_password
 
         db.flush()
         db.refresh(user)
@@ -197,7 +272,7 @@ def replace_user(
     username: str,
     email: str,
     hashed_password: str,
-) -> Optional[User]:
+) -> User | None:
     """Replace user state (PUT). Returns None if user not found."""
     try:
         user = get_user_by_id(db, user_id)
@@ -205,9 +280,11 @@ def replace_user(
             logger.info("Skip replace: user %s not found", user_id)
             return None
 
-        setattr(user, "username", username)
-        setattr(user, "email", email)
-        setattr(user, "hashed_password", hashed_password)
+        # Use a narrow cast to Any to avoid static type confusion with Column descriptors in type checkers
+        u = cast(Any, user)
+        u.username = username
+        u.email = email
+        u.hashed_password = hashed_password
 
         db.flush()
         db.refresh(user)

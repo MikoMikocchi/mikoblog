@@ -1,17 +1,9 @@
 from datetime import datetime
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    ForeignKey,
-    Index,
-    UniqueConstraint,
-)
+
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..database import Base
-
 
 JTI_MAX_LENGTH = 36
 USER_AGENT_MAX_LENGTH = 255
@@ -28,7 +20,8 @@ class RefreshToken(Base):
         jti: Unique identifier (uuid4 string), unique, not null
         issued_at: UTC timestamp when the refresh token was issued
         expires_at: UTC timestamp when the refresh token expires
-        rotated_from_jti: jti of the previous token in rotation chain (nullable initially; becomes not null upon rotation)
+        rotated_from_jti: jti of the previous token in rotation chain
+        (nullable initially; becomes not null upon rotation)
         revoked_at: UTC timestamp when token was revoked (nullable if active)
         user_agent: Optional user agent string to aid audits
         ip: Optional client IP

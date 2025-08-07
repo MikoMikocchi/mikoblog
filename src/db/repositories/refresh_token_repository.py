@@ -1,9 +1,9 @@
-import logging
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Optional, Iterable
+import logging
 
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from db.models.refresh_token import RefreshToken
 from db.utils import transactional
@@ -11,7 +11,7 @@ from db.utils import transactional
 logger = logging.getLogger(__name__)
 
 
-def get_by_jti(db: Session, jti: str) -> Optional[RefreshToken]:
+def get_by_jti(db: Session, jti: str) -> RefreshToken | None:
     """Fetch refresh token by its unique jti."""
     try:
         return db.query(RefreshToken).filter(RefreshToken.jti == jti).first()
@@ -35,9 +35,7 @@ def get_active_for_user(db: Session, user_id: int) -> Iterable[RefreshToken]:
             .all()
         )
     except SQLAlchemyError as e:
-        logger.error(
-            "DB error while listing active refresh tokens for user %s: %s", user_id, e
-        )
+        logger.error("DB error while listing active refresh tokens for user %s: %s", user_id, e)
         raise
 
 
@@ -49,9 +47,9 @@ def create(
     jti: str,
     issued_at: datetime,
     expires_at: datetime,
-    rotated_from_jti: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    ip: Optional[str] = None,
+    rotated_from_jti: str | None = None,
+    user_agent: str | None = None,
+    ip: str | None = None,
 ) -> RefreshToken:
     """Create a new refresh token record."""
     try:
@@ -70,16 +68,12 @@ def create(
         logger.info("Created refresh token jti=%s for user_id=%s", jti, user_id)
         return token
     except SQLAlchemyError as e:
-        logger.error(
-            "DB error while creating refresh token for user %s: %s", user_id, e
-        )
+        logger.error("DB error while creating refresh token for user %s: %s", user_id, e)
         raise
 
 
 @transactional
-def revoke_by_jti(
-    db: Session, jti: str, *, revoked_at: Optional[datetime] = None
-) -> bool:
+def revoke_by_jti(db: Session, jti: str, *, revoked_at: datetime | None = None) -> bool:
     """Revoke a refresh token by jti. Returns True if updated."""
     revoked_at = revoked_at or datetime.utcnow()
     try:
@@ -95,7 +89,7 @@ def revoke_by_jti(
                 getattr(token, "revoked_at", None),
             )
             return True
-        setattr(token, "revoked_at", revoked_at)
+        token.revoked_at = revoked_at
         db.flush()
         db.refresh(token)
         logger.info("Revoked refresh token jti=%s", jti)
@@ -106,9 +100,7 @@ def revoke_by_jti(
 
 
 @transactional
-def revoke_all_for_user(
-    db: Session, user_id: int, *, revoked_at: Optional[datetime] = None
-) -> int:
+def revoke_all_for_user(db: Session, user_id: int, *, revoked_at: datetime | None = None) -> int:
     """Revoke all active refresh tokens for a user. Returns count affected."""
     revoked_at = revoked_at or datetime.utcnow()
     try:
@@ -123,16 +115,14 @@ def revoke_all_for_user(
         count = 0
         for t in tokens:
             # безопасно присваиваем значение через setattr для обхода статического анализа
-            setattr(t, "revoked_at", revoked_at)
+            t.revoked_at = revoked_at
             count += 1
         if count:
             db.flush()
         logger.info("Revoked %s refresh tokens for user_id=%s", count, user_id)
         return count
     except SQLAlchemyError as e:
-        logger.error(
-            "DB error while revoking all refresh tokens for user %s: %s", user_id, e
-        )
+        logger.error("DB error while revoking all refresh tokens for user %s: %s", user_id, e)
         raise
 
 
@@ -145,9 +135,9 @@ def rotate(
     user_id: int,
     issued_at: datetime,
     expires_at: datetime,
-    user_agent: Optional[str] = None,
-    ip: Optional[str] = None,
-) -> Optional[RefreshToken]:
+    user_agent: str | None = None,
+    ip: str | None = None,
+) -> RefreshToken | None:
     """
     Rotate a refresh token:
       - revoke old token (revoked_at = now)
@@ -163,7 +153,7 @@ def rotate(
 
         # Mark old as revoked if not already
         if getattr(old, "revoked_at", None) is None:
-            setattr(old, "revoked_at", now)
+            old.revoked_at = now
 
         # Create new rotated token
         new_token = RefreshToken(
@@ -190,7 +180,7 @@ def rotate(
         raise
 
 
-def is_active(db: Session, jti: str, *, at: Optional[datetime] = None) -> bool:
+def is_active(db: Session, jti: str, *, at: datetime | None = None) -> bool:
     """Check if refresh token with jti is active (not revoked, not expired)."""
     at = at or datetime.utcnow()
     try:

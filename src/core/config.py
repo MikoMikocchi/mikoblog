@@ -1,25 +1,17 @@
-import os
 from functools import lru_cache
-from typing import Optional
+import os
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .config_models import (
-    DatabaseConfig,
-    LoggingConfig,
-    SecurityConfig,
-    ServerConfig,
-)
+from .config_models import DatabaseConfig, LoggingConfig, SecurityConfig, ServerConfig
 
 
 class Settings(BaseSettings):
     """Application settings assembled from environment variables and defaults."""
 
     # Environment
-    environment: str = Field(
-        default="development", pattern="^(development|staging|production)$"
-    )
+    environment: str = Field(default="development", pattern="^(development|staging|production)$")
     debug: bool = Field(default=False)
 
     # API
@@ -34,10 +26,10 @@ class Settings(BaseSettings):
     logging: LoggingConfig = LoggingConfig()
 
     # Database (populated in validator)
-    database: Optional[DatabaseConfig] = None
+    database: DatabaseConfig | None = None
 
     # Security (populated in validator)
-    security: Optional[SecurityConfig] = None
+    security: SecurityConfig | None = None
 
     # Pydantic v2 settings config
     model_config = SettingsConfigDict(
@@ -54,15 +46,12 @@ class Settings(BaseSettings):
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL environment variable is required")
-        # Normalize docker-compose service host naming if common alias 'db' is used instead of actual service name.
-        # Prefer explicit DATABASE_URL from env; only patch when it's clearly pointing at a non-existing 'db' host
-        # while the compose service name used in this project is 'pg'.
+        # Normalize docker-compose host alias if env uses non-existing 'db' host.
         try:
-            # minimal, safe string substitution without parsing credentials
             if "://postgres:" in database_url and "@db:" in database_url:
                 database_url = database_url.replace("@db:", "@pg:")
         except Exception:
-            # in case of any unexpected format, keep original
+            # In case of any unexpected format, keep original
             pass
 
         # DatabaseConfig assembly from env with defaults
@@ -83,9 +72,7 @@ class Settings(BaseSettings):
         secret_key = os.getenv("SECRET_KEY")
         if not secret_key:
             if self.environment == "production":
-                raise ValueError(
-                    "SECRET_KEY environment variable is required in production"
-                )
+                raise ValueError("SECRET_KEY environment variable is required in production")
             # Development fallback (never for production)
             secret_key = "dev-secret-key-not-for-production-use-32-chars-minimum"
 
@@ -114,7 +101,7 @@ class Settings(BaseSettings):
         return self
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> "Settings":
     """Return cached settings instance."""
     return Settings()

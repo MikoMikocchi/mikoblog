@@ -1,10 +1,10 @@
-import logging
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
+import logging
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from core.config import settings
@@ -39,20 +39,7 @@ SessionLocal = sessionmaker(
 )
 
 
-def init_db() -> None:
-    try:
-        logger.info("Initializing database...")
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database initialized successfully")
-    except SQLAlchemyError as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error during database initialization: {e}")
-        raise
-
-
-def get_db() -> Generator[Session, None, None]:
+def get_db() -> Generator[Session]:
     db = SessionLocal()
     try:
         logger.debug("Database session created")
@@ -71,7 +58,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 @contextmanager
-def get_db_context() -> Generator[Session, None, None]:
+def get_db_context() -> Generator[Session]:
     db = SessionLocal()
     try:
         logger.debug("Database context session created")

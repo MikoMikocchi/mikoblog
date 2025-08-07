@@ -1,61 +1,87 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from datetime import UTC, datetime, timedelta
+import os
+import re
 
-from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.security import verify_password, get_password_hash
-from core.jwt import (
-    encode_access_token,
-    encode_refresh_token,
-    make_jti,
-    decode_token,
-    validate_typ,
-)
-from db.repositories import user_repository
-from db.repositories import refresh_token_repository as rt_repo
+from core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
+from core.jwt import decode_token, encode_access_token, encode_refresh_token, make_jti, validate_typ
+from core.security import get_password_hash, verify_password
+from db.repositories import refresh_token_repository as rt_repo, user_repository
 from schemas.auth import AuthLogin, AuthRegister, TokenPayload
 from schemas.responses import SuccessResponse
 from schemas.users import UserOut
 
 
-ACCESS_EXPIRES_MINUTES = 15  # mirrored by env; used to compute expires_in in responses
-
-
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _compute_access_expires_in_seconds() -> int:
-    return ACCESS_EXPIRES_MINUTES * 60
+    minutes = int(os.getenv("JWT_ACCESS_MINUTES", "15"))
+    return minutes * 60
 
 
 def register(db: Session, payload: AuthRegister) -> SuccessResponse[UserOut]:
     """
     Create a new user and return UserOut.
-    Performs uniqueness checks and hashes password.
+    Performs optimistic uniqueness checks and hashes the password.
+    Maps domain validation/conflict errors via global handler.
     """
-    if user_repository.get_user_by_username(db, payload.username):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Username already registered"
-        )
-    if user_repository.get_user_by_email(db, payload.email):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
-        )
+    username = payload.username
+    email_clean = payload.email.strip()
+    if payload.email != email_clean:
+        raise ValidationError("Invalid email address")
 
-    hashed_password = get_password_hash(payload.password)
-    db_user = user_repository.create_user(
-        db=db,
-        username=payload.username,
-        email=payload.email,
-        hashed_password=hashed_password,
-    )
+    # Enforce username business rules at domain layer
+    if username.lower() in {"admin", "root", "system", "api", "test"}:
+        raise ValidationError("Username not allowed")
+
+    if not re.fullmatch(r"^[a-zA-Z0-9_-]+$", username):
+        raise ValidationError("Invalid username format")
+
+    # Password strength (mirror schemas guard for defense in depth)
+    pwd = payload.password
+    if not (
+        len(pwd) >= 12
+        and any(c.isupper() for c in pwd)
+        and any(c.islower() for c in pwd)
+        and any(c.isdigit() for c in pwd)
+        and any(c in '!@#$%^&*(),.?":{}|<>' for c in pwd)
+    ):
+        raise ValidationError("Password does not meet complexity requirements")
+
+    # Optimistic checks before attempting INSERT
+    if user_repository.get_user_by_username(db, username):
+        raise ConflictError("Username already registered")
+    if user_repository.get_user_by_email(db, email_clean):
+        raise ConflictError("Email already registered")
+
+    hashed_password = get_password_hash(pwd)
+
+    # Attempt create; handle unique races deterministically
+    try:
+        db_user = user_repository.create_user(
+            db=db,
+            username=username,
+            email=email_clean,
+            hashed_password=hashed_password,
+        )
+    except IntegrityError as ie:
+        raise ConflictError("Username or email already registered") from ie
+    except Exception as e:
+        msg = str(e).lower()
+        if "lock timeout" in msg or "locknotavailable" in msg or "could not obtain lock" in msg:
+            if user_repository.get_user_by_username(db, username) or user_repository.get_user_by_email(db, email_clean):
+                raise ConflictError("Username or email already registered") from e
+        raise
 
     return SuccessResponse[UserOut].ok(UserOut.model_validate(db_user))
 
 
 def _resolve_user_by_login(db: Session, username_or_email: str):
+    # Repository functions return ORM User or None.
     user = user_repository.get_user_by_username(db, username_or_email)
     if not user:
         user = user_repository.get_user_by_email(db, username_or_email)
@@ -66,9 +92,9 @@ def login(
     db: Session,
     payload: AuthLogin,
     *,
-    user_agent: Optional[str],
-    ip: Optional[str],
-) -> Tuple[SuccessResponse[TokenPayload], str]:
+    user_agent: str | None,
+    ip: str | None,
+) -> tuple[SuccessResponse[TokenPayload], str]:
     """
     Validate credentials, create refresh record and return:
       - SuccessResponse[TokenPayload] (access token info)
@@ -76,22 +102,23 @@ def login(
     """
     user = _resolve_user_by_login(db, payload.username_or_email)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise AuthenticationError("Invalid credentials")
+    # Help static analyzers: assert presence of id attr, then set local user_id
+    if not hasattr(user, "id"):
+        raise AuthenticationError("Invalid user object")
+    user_id: int = int(user.id)  # type: ignore[attr-defined]
 
     if not verify_password(payload.password, getattr(user, "hashed_password", "")):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-        )
+        raise AuthenticationError("Invalid credentials")
 
     # Create refresh token record (DB) and JWT pair
     now = _utcnow()
     refresh_expires = now + timedelta(days=7)
     jti = make_jti()
+
     rt_repo.create(
         db=db,
-        user_id=int(getattr(user, "id")),
+        user_id=user_id,
         jti=jti,
         issued_at=now,
         expires_at=refresh_expires,
@@ -99,8 +126,8 @@ def login(
         ip=ip,
     )
 
-    access = encode_access_token(int(getattr(user, "id")), jti=make_jti())
-    refresh = encode_refresh_token(int(getattr(user, "id")), jti=jti)
+    access = encode_access_token(user_id, jti=make_jti())
+    refresh = encode_refresh_token(user_id, jti=jti)
 
     payload_out = TokenPayload(
         access_token=access,
@@ -114,9 +141,9 @@ def refresh(
     db: Session,
     refresh_jwt: str,
     *,
-    user_agent: Optional[str],
-    ip: Optional[str],
-) -> Tuple[SuccessResponse[TokenPayload], str]:
+    user_agent: str | None,
+    ip: str | None,
+) -> tuple[SuccessResponse[TokenPayload], str]:
     """
     Validate refresh JWT, rotate record:
       - revoke old
@@ -130,24 +157,16 @@ def refresh(
     sub = decoded.get("sub")
     jti = decoded.get("jti")
     if not sub or not jti:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        )
+        raise AuthenticationError("Invalid refresh token")
 
     try:
         user_id = int(sub)
     except (TypeError, ValueError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token subject",
-        )
+        raise AuthenticationError("Invalid refresh token subject") from None
 
     # Check record state
     if not rt_repo.is_active(db, jti):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token is not active",
-        )
+        raise AuthenticationError("Refresh token is not active")
 
     # Rotate
     now = _utcnow()
@@ -164,9 +183,7 @@ def refresh(
         ip=ip,
     )
     if not new_record:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token not found"
-        )
+        raise NotFoundError("Refresh token not found")
 
     # Issue new pair
     access = encode_access_token(user_id, jti=make_jti())
@@ -188,9 +205,7 @@ def logout(db: Session, refresh_jwt: str) -> SuccessResponse[str]:
     validate_typ(decoded, expected_typ="refresh")
     jti = decoded.get("jti")
     if not jti:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
-        )
+        raise AuthenticationError("Invalid refresh token")
 
     rt_repo.revoke_by_jti(db=db, jti=jti)
     return SuccessResponse[str].ok("Logged out")
