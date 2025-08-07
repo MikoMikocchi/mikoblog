@@ -1,19 +1,18 @@
-import logging
-from datetime import datetime
 from contextlib import asynccontextmanager
+from datetime import datetime
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 
-
-from core.config import settings
-from core.logging import setup_logging
-from core.exceptions import BlogException, map_exception_to_http
-from api.user_controller import users_router
-from api.post_controller import posts_router
 from api.auth_controller import auth_router
-from db.database import init_db, close_db_connections, check_db_connection
+from api.post_controller import posts_router
+from api.user_controller import users_router
+from core.config import settings
+from core.exceptions import AuthenticationError, BlogException, map_exception_to_http
+from core.logging import setup_logging
+from db.database import check_db_connection, close_db_connections
 
 # Initialize global logging configuration early
 setup_logging()
@@ -25,9 +24,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up MikoBlog API")
 
     try:
-        init_db()
-        logger.info("Database initialized successfully")
-
         # Optional DB health check controlled by environment flag DB_CHECK_ON_START
         import os as _os
 
@@ -43,9 +39,7 @@ async def lifespan(app: FastAPI):
                 logger.error("Database connection failed")
                 raise RuntimeError("Database connection failed")
         else:
-            logger.debug(
-                "Skipping DB connection check on startup (DB_CHECK_ON_START=false)"
-            )
+            logger.debug("Skipping DB connection check on startup (DB_CHECK_ON_START=false)")
 
         logger.info("Application startup completed")
 
@@ -83,11 +77,26 @@ app.include_router(posts_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
 
 
-# Global exception handler for domain-level exceptions
+# Global handler for domain exceptions
 @app.exception_handler(BlogException)
 async def blog_exception_handler(request: Request, exc: BlogException):
     http_exc = map_exception_to_http(exc)
-    # Convert to a JSONResponse to ensure consistent payload shape
+    return JSONResponse(
+        status_code=http_exc.status_code,
+        content={
+            "success": False,
+            "message": http_exc.detail,
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": {"type": exc.__class__.__name__},
+        },
+        headers=getattr(http_exc, "headers", None) or {},
+    )
+
+
+# Special handler for auth errors (if raised explicitly)
+@app.exception_handler(AuthenticationError)
+async def auth_exception_handler(request: Request, exc: AuthenticationError):
+    http_exc = map_exception_to_http(exc)
     return JSONResponse(
         status_code=http_exc.status_code,
         content={
