@@ -16,6 +16,26 @@ services:
       pg:
         condition: service_healthy
 
+  # Optional service to run tests inside a container against pg_test
+  test:
+    build:
+      dockerfile: Dockerfile
+      context: ./
+    env_file:
+      - .env.test
+    environment:
+      # Ensure tests point to the test DB service inside the compose network
+      DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+psycopg2://postgres:postgres@pg_test:5432/mikoblog_test}
+      PYTHONPATH: /src
+    depends_on:
+      pg_test:
+        condition: service_healthy
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./secrets:/app/secrets:ro
+    command: >
+      sh -lc "pytest -q"
+
   pg:
     image: postgres:17.5
     environment:
@@ -35,5 +55,24 @@ services:
       # Mount init scripts to create required extensions on first cluster init
       - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
+  pg_test:
+    image: postgres:17.5
+    environment:
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-mikoblog_test}
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_TEST_USER:-postgres} -d ${POSTGRES_TEST_DB:-mikoblog_test}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    ports:
+      - "${POSTGRES_TEST_PORT:-55432}:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
 volumes:
   postgres_data:
+  postgres_test_data:
