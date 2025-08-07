@@ -16,15 +16,93 @@ dependencies = [
     "psycopg2 (>=2.9.10,<3.0.0)",
     "passlib[bcrypt] (>=1.7.4,<2.0.0)",
     "bcrypt (>=4.3.0,<5.0.0)",
-    "pyjwt (>=2.10.1,<3.0.0)"
+    "pyjwt[crypto] (>=2.10.1,<3.0.0)",
+    "asgi-lifespan (>=2.1.0,<3.0.0)",
+    "trio (>=0.30.0,<0.31.0)",
+    "alembic (>=1.16.4,<2.0.0)"
 ]
 
 [tool.poetry]
+name = "mikoblog"
 package-mode = false
+packages = [
+    { include = "src", from = "." }
+]
+
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 python-dotenv = "^1.1.1"
+pytest-timeout = "^2.4.0"
+ruff = "^0.12.7"
+black = "^25.1.0"
+isort = "^6.0.1"
+mypy = "^1.17.1"
+pytest-cov = "^6.2.1"
+pre-commit = "^4.2.0"
+
+# -----------------------------
+# Tooling configuration
+# -----------------------------
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["src"]
+combine_as_imports = true
+force_sort_within_sections = true
+float_to_top = true
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["migrations"]
+
+# Lint configuration
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["D"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.13"
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+no_implicit_optional = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+pretty = true
+show_error_codes = true
+plugins = []
+
+# Per-module ignores for third-party libs without type hints
+[[tool.mypy.overrides]]
+module = ["passlib.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+  "src/__init__.py",
+  "migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 0
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
