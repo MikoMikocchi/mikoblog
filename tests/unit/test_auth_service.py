@@ -16,9 +16,7 @@ def _utcnow() -> datetime:
 
 @pytest.mark.unit
 def test_register_success_creates_user_and_hashes_password(db_session: Session):
-    payload = AuthRegister(
-        username="unituser", email="unit@example.com", password="Str0ng!Passw0rd"
-    )
+    payload = AuthRegister(username="unituser", email="unit@example.com", password="Str0ng!Passw0rd")
     resp = auth_service.register(db=db_session, payload=payload)
     assert isinstance(resp, SuccessResponse)
     out = resp.data
@@ -41,9 +39,7 @@ def test_register_conflicts_username_email(db_session: Session):
     with pytest.raises(ConflictError) as ex1:
         auth_service.register(
             db=db_session,
-            payload=AuthRegister(
-                username="dupuser", email="new@example.com", password="Str0ng!Passw0rd"
-            ),
+            payload=AuthRegister(username="dupuser", email="new@example.com", password="Str0ng!Passw0rd"),
         )
     assert "Username already registered" in str(ex1.value)
 
@@ -51,9 +47,7 @@ def test_register_conflicts_username_email(db_session: Session):
     with pytest.raises(ConflictError) as ex2:
         auth_service.register(
             db=db_session,
-            payload=AuthRegister(
-                username="dup2", email="dup@example.com", password="Str0ng!Passw0rd"
-            ),
+            payload=AuthRegister(username="dup2", email="dup@example.com", password="Str0ng!Passw0rd"),
         )
     assert "Email already registered" in str(ex2.value)
 
@@ -87,9 +81,7 @@ def test_login_success_creates_refresh_and_returns_access(db_session: Session):
 
 @pytest.mark.unit
 def test_login_invalid_credentials(db_session: Session):
-    reg = AuthRegister(
-        username="badlogin", email="badlogin@example.com", password="Str0ng!Passw0rd"
-    )
+    reg = AuthRegister(username="badlogin", email="badlogin@example.com", password="Str0ng!Passw0rd")
     auth_service.register(db=db_session, payload=reg)
 
     from src.core.exceptions import AuthenticationError
@@ -126,9 +118,7 @@ def test_refresh_success_rotates_refresh_and_issues_new_access(db_session: Sessi
     )
 
     # act
-    resp, new_refresh = auth_service.refresh(
-        db=db_session, refresh_jwt=refresh_jwt, user_agent="pytest2", ip="127.0.0.2"
-    )
+    resp, new_refresh = auth_service.refresh(db=db_session, refresh_jwt=refresh_jwt, user_agent="pytest2", ip="127.0.0.2")
 
     # assert
     assert isinstance(resp, SuccessResponse)
@@ -150,9 +140,7 @@ def test_refresh_invalid_and_inactive_paths(db_session: Session, monkeypatch):
     with pytest.raises(AuthenticationError):
         auth_service.refresh(db=db_session, refresh_jwt="not.a.jwt", user_agent=None, ip=None)
 
-    reg = AuthRegister(
-        username="inactive", email="inactive@example.com", password="Str0ng!Passw0rd"
-    )
+    reg = AuthRegister(username="inactive", email="inactive@example.com", password="Str0ng!Passw0rd")
     auth_service.register(db=db_session, payload=reg)
     _, refresh_jwt = auth_service.login(
         db=db_session,
@@ -189,9 +177,7 @@ def test_logout_by_refresh_token(db_session: Session):
 
 @pytest.mark.unit
 def test_logout_all_revokes_all_active_for_user(db_session: Session):
-    reg = AuthRegister(
-        username="logoutall", email="logoutall@example.com", password="Str0ng!Passw0rd"
-    )
+    reg = AuthRegister(username="logoutall", email="logoutall@example.com", password="Str0ng!Passw0rd")
     auth_service.register(db=db_session, payload=reg)
     # create two active sessions (double login)
     _, r1 = auth_service.login(

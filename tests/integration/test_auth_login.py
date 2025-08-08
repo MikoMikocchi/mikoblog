@@ -8,9 +8,7 @@ from tests.factories.users import create_user
 @pytest.mark.integration
 @pytest.mark.auth
 @pytest.mark.anyio
-async def test_login_success_with_username_sets_refresh_cookie(
-    client: AsyncClient, db_session: Session
-):
+async def test_login_success_with_username_sets_refresh_cookie(client: AsyncClient, db_session: Session):
     # Register via API to ensure visibility across request boundaries, then login by username
     import uuid as _uuid
 
@@ -47,11 +45,7 @@ async def test_login_success_with_username_sets_refresh_cookie(
     attr_line = ";".join(set_cookie_headers)
     assert "HttpOnly" in attr_line
     assert "Secure" in attr_line
-    assert (
-        ("SameSite=Strict" in attr_line)
-        or ("SameSite=strict" in attr_line)
-        or ("samesite=strict" in attr_line.lower())
-    )
+    assert ("SameSite=Strict" in attr_line) or ("SameSite=strict" in attr_line) or ("samesite=strict" in attr_line.lower())
     assert "Max-Age=604800" in attr_line or "Max-Age= 604800" in attr_line
     # Allow router prefix normalization like Path=/api/v1/auth
     assert "Path=" in attr_line and "/auth" in attr_line

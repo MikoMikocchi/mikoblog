@@ -5,9 +5,7 @@ from sqlalchemy.orm import Session
 
 @pytest.mark.e2e
 @pytest.mark.anyio
-async def test_full_auth_flow_register_login_access_refresh_logout(
-    client: AsyncClient, db_session: Session
-):
+async def test_full_auth_flow_register_login_access_refresh_logout(client: AsyncClient, db_session: Session):
     # 1) Register
     # Generate unique registration data per run to avoid 409 conflicts in repeated or parallel runs
     import uuid as _uuid

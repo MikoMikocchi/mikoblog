@@ -28,9 +28,7 @@ from sqlalchemy.orm import Session
         ("user12", "valid12@example.com", "Str0ng!Passw0rd", 201),
     ],
 )
-async def test_register_parametrized(
-    username, email, password, expected_status, client: AsyncClient
-):
+async def test_register_parametrized(username, email, password, expected_status, client: AsyncClient):
     if expected_status == 201:
         import uuid as _uuid
 
@@ -214,12 +212,8 @@ async def test_login_empty_fields_validation(client: AsyncClient):
     resp = await client.post("/api/v1/auth/login", json={"username_or_email": "", "password": "x"})
     assert resp.status_code == 422
     # Too short username_or_email -> 422
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username_or_email": "ab", "password": "x"}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"username_or_email": "ab", "password": "x"})
     assert resp.status_code == 422
     # Empty password -> 422 (min_length=1)
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username_or_email": "abc", "password": ""}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"username_or_email": "abc", "password": ""})
     assert resp.status_code == 422

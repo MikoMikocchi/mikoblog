@@ -261,3 +261,47 @@ async def client(override_get_db: None) -> AsyncGenerator[AsyncClient]:
             follow_redirects=True,
         ) as ac:
             yield ac
+
+
+@pytest.fixture(scope="function")
+async def unit_client() -> AsyncGenerator[AsyncClient]:
+    """
+    Async HTTP client for unit tests without database dependency.
+    """
+
+    # Create a copy of the app for unit tests to avoid conflicts
+    from src.main import app as unit_app
+
+    @runtime_checkable
+    class _HasUserFields(Protocol):
+        id: int
+        username: str
+        email: str
+
+    @unit_app.get("/e2e/protected")
+    async def _protected(
+        user: Annotated[_HasUserFields, Depends(get_current_user)],
+    ) -> dict[str, str]:
+        return {"user": user.username}
+
+    async with LifespanManager(unit_app):
+        # Use ASGI transport so requests go directly to the app (no real TCP/DNS).
+        try:
+            from httpx import ASGITransport  # type: ignore
+
+            transport = ASGITransport(app=unit_app)
+        except Exception:
+            from httpx import _transports
+
+            transport = _transports.asgi.ASGITransport(app=unit_app)
+
+        # Use HTTPS scheme to allow httpx cookie jar to accept Secure cookies in tests
+        async with AsyncClient(
+            transport=transport,
+            base_url="https://testserver.local",
+            follow_redirects=True,
+        ) as ac:
+            yield ac
+
+    # Clean up dependency overrides
+    unit_app.dependency_overrides.clear()

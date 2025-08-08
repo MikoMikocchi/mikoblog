@@ -62,9 +62,7 @@ async def test_logout_all_requires_valid_refresh_cookie(client: AsyncClient, db_
 @pytest.mark.integration
 @pytest.mark.auth
 @pytest.mark.anyio
-async def test_refresh_cookie_is_required_and_rotation_works(
-    client: AsyncClient, db_session: Session
-):
+async def test_refresh_cookie_is_required_and_rotation_works(client: AsyncClient, db_session: Session):
     # Without refresh cookie -> 401
     r = await client.post("/api/v1/auth/refresh")
     assert r.status_code == 401
@@ -131,11 +129,7 @@ async def test_login_sets_cookie_attributes_strict(client: AsyncClient, db_sessi
     assert "__Host-rt=" in set_cookie
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
-    assert (
-        ("SameSite=Strict" in set_cookie)
-        or ("SameSite=strict" in set_cookie)
-        or ("samesite=strict" in set_cookie.lower())
-    )
+    assert ("SameSite=Strict" in set_cookie) or ("SameSite=strict" in set_cookie) or ("samesite=strict" in set_cookie.lower())
     # Path can be normalized by router prefixing (e.g., /api/v1/auth).
     assert "/auth" in set_cookie and "Path=" in set_cookie
 

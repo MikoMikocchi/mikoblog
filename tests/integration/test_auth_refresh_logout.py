@@ -8,9 +8,7 @@ from tests.factories.users import create_user
 @pytest.mark.integration
 @pytest.mark.auth
 @pytest.mark.anyio
-async def test_refresh_success_rotates_cookie_and_issues_new_access(
-    client: AsyncClient, db_session: Session
-):
+async def test_refresh_success_rotates_cookie_and_issues_new_access(client: AsyncClient, db_session: Session):
     """
     Reliable scenario "login -> refresh":
       1) Create a user via factory (inside test transaction).
