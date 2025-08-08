@@ -46,6 +46,7 @@ pre-commit = "^4.2.0"
 # -----------------------------
 # Tooling configuration
 # -----------------------------
+pytest-asyncio = "^1.1.0"
 
 [tool.black]
 line-length = 140
