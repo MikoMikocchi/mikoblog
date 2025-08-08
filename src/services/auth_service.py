@@ -1,17 +1,17 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 import os
 import re
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
-from core.jwt import decode_token, encode_access_token, encode_refresh_token, make_jti, validate_typ
+from core.exceptions import AuthenticationError, ConflictError, ValidationError
 from core.security import get_password_hash, verify_password
-from db.repositories import refresh_token_repository as rt_repo, user_repository
+from db.repositories import user_repository
 from schemas.auth import AuthLogin, AuthRegister, TokenPayload
 from schemas.responses import SuccessResponse
 from schemas.users import UserOut
+from services import jwt_service
 
 
 def _utcnow() -> datetime:
@@ -111,28 +111,12 @@ async def login(
     if not verify_password(payload.password, getattr(user, "hashed_password", "")):
         raise AuthenticationError("Invalid credentials")
 
-    # Create refresh token record (DB) and JWT pair
-    now = _utcnow()
-    refresh_expires = now + timedelta(days=7)
-    jti = make_jti()
-
-    await rt_repo.create(
+    # Create tokens using jwt_service
+    payload_out, refresh = await jwt_service.create_tokens_for_user(
         db=db,
         user_id=user_id,
-        jti=jti,
-        issued_at=now,
-        expires_at=refresh_expires,
         user_agent=user_agent,
         ip=ip,
-    )
-
-    access = encode_access_token(user_id, jti=make_jti())
-    refresh = encode_refresh_token(user_id, jti=jti)
-
-    payload_out = TokenPayload(
-        access_token=access,
-        token_type="bearer",
-        expires_in=_compute_access_expires_in_seconds(),
     )
     return SuccessResponse[TokenPayload].ok(payload_out), refresh
 
@@ -151,48 +135,12 @@ async def refresh(
       - issue new access and refresh JWT
     Returns SuccessResponse[TokenPayload] and new refresh JWT.
     """
-    decoded = decode_token(refresh_jwt)
-    validate_typ(decoded, expected_typ="refresh")
-
-    sub = decoded.get("sub")
-    jti = decoded.get("jti")
-    if not sub or not jti:
-        raise AuthenticationError("Invalid refresh token")
-
-    try:
-        user_id = int(sub)
-    except (TypeError, ValueError):
-        raise AuthenticationError("Invalid refresh token subject") from None
-
-    # Check record state
-    if not await rt_repo.is_active(db, jti):
-        raise AuthenticationError("Refresh token is not active")
-
-    # Rotate
-    now = _utcnow()
-    new_jti = make_jti()
-    new_expires = now + timedelta(days=7)
-    new_record = await rt_repo.rotate(
+    # Rotate tokens using jwt_service
+    payload_out, new_refresh = await jwt_service.rotate_tokens(
         db=db,
-        old_jti=jti,
-        new_jti=new_jti,
-        user_id=user_id,
-        issued_at=now,
-        expires_at=new_expires,
+        refresh_jwt=refresh_jwt,
         user_agent=user_agent,
         ip=ip,
-    )
-    if not new_record:
-        raise NotFoundError("Refresh token not found")
-
-    # Issue new pair
-    access = encode_access_token(user_id, jti=make_jti())
-    new_refresh = encode_refresh_token(user_id, jti=new_jti)
-
-    payload_out = TokenPayload(
-        access_token=access,
-        token_type="bearer",
-        expires_in=_compute_access_expires_in_seconds(),
     )
     return SuccessResponse[TokenPayload].ok(payload_out), new_refresh
 
@@ -201,13 +149,7 @@ async def logout(db: AsyncSession, refresh_jwt: str) -> SuccessResponse[str]:
     """
     Revoke refresh token from provided JWT.
     """
-    decoded = decode_token(refresh_jwt)
-    validate_typ(decoded, expected_typ="refresh")
-    jti = decoded.get("jti")
-    if not jti:
-        raise AuthenticationError("Invalid refresh token")
-
-    await rt_repo.revoke_by_jti(db=db, jti=jti)
+    await jwt_service.revoke_refresh_token(db=db, refresh_jwt=refresh_jwt)
     return SuccessResponse[str].ok("Logged out")
 
 
@@ -215,5 +157,5 @@ async def logout_all(db: AsyncSession, user_id: int) -> SuccessResponse[str]:
     """
     Revoke all active refresh tokens for the specified user.
     """
-    await rt_repo.revoke_all_for_user(db=db, user_id=user_id)
+    await jwt_service.revoke_all_user_tokens(db=db, user_id=user_id)
     return SuccessResponse[str].ok("Logged out from all sessions")

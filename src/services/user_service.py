@@ -8,6 +8,7 @@ from core.security import get_password_hash
 from db.repositories import user_repository
 from schemas.responses import PaginatedResponse, PaginationMeta, SuccessResponse
 from schemas.users import UserCreate, UserOut, UserQuery, UserReplace, UserUpdate
+from services.auth_utils import check_email_unique, check_username_unique
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,8 @@ async def list_users(
 async def create_user(db: AsyncSession, user_data: UserCreate) -> SuccessResponse[UserOut]:
     """Create new user with uniqueness checks and password hashing."""
     try:
-        if await user_repository.get_user_by_username(db, user_data.username):
-            logger.warning("Username '%s' already exists", user_data.username)
-            raise ConflictError("Username already registered")
-
-        if await user_repository.get_user_by_email(db, user_data.email):
-            logger.warning("Email '%s' already exists", user_data.email)
-            raise ConflictError("Email already registered")
+        await check_username_unique(db, user_data.username)
+        await check_email_unique(db, user_data.email)
 
         hashed_password = get_password_hash(user_data.password)
 
@@ -98,13 +94,9 @@ async def _ensure_unique_on_change(
 ) -> None:
     """Ensure username/email uniqueness if changed for a specific user."""
     if new_username is not None:
-        existing = await user_repository.get_user_by_username(db, new_username)
-        if existing is not None and int(getattr(existing, "id", 0)) != int(user_id):
-            raise ConflictError("Username already registered")
+        await check_username_unique(db, new_username, user_id)
     if new_email is not None:
-        existing = await user_repository.get_user_by_email(db, new_email)
-        if existing is not None and int(getattr(existing, "id", 0)) != int(user_id):
-            raise ConflictError("Email already registered")
+        await check_email_unique(db, new_email, user_id)
 
 
 async def update_user_patch(db: AsyncSession, user_id: int, patch: UserUpdate) -> SuccessResponse[UserOut]:

@@ -1,11 +1,12 @@
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from core.exceptions import NotFoundError, ValidationError
 import db.repositories.post_repository as post_repository
 import schemas.posts
 from schemas.responses import PaginatedResponse, PaginationMeta, SuccessResponse
+from services.auth_utils import check_create_post_permission, check_post_owner_or_admin
 
 
 async def get_all_posts(db: AsyncSession, page: int = 1, limit: int = 10) -> PaginatedResponse[schemas.posts.PostOut]:
@@ -45,10 +46,7 @@ async def create_post(
     current_user: Any | None = None,
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
-        is_admin = (current_user.role if hasattr(current_user, "role") else "user") == "admin"
-        user_id = int(current_user.id)
-        if not is_admin and int(post_data.author_id) != user_id:
-            raise AuthorizationError("Cannot create post for another user")
+        await check_create_post_permission(current_user, post_data.author_id)
 
     post = await post_repository.create_post(
         db=db,
@@ -64,25 +62,11 @@ async def create_post(
     return SuccessResponse[schemas.posts.PostOut].ok(schemas.posts.PostOut.model_validate(post))
 
 
-async def _ensure_owner_or_admin(db: AsyncSession, post_id: int, current_user: Any) -> None:
-    post = await post_repository.get_post_by_id(db, post_id)
-    if not post:
-        raise NotFoundError("Post not found")
-    is_admin = (current_user.role if hasattr(current_user, "role") else "user") == "admin"
-    raw_owner_id = getattr(post, "author_id", None)
-    if raw_owner_id is None:
-        raise NotFoundError("Post has no author")
-    owner_id = cast(int, raw_owner_id) if isinstance(raw_owner_id, int) else int(raw_owner_id)
-    user_id = int(current_user.id)
-    if not is_admin and owner_id != user_id:
-        raise AuthorizationError("Forbidden")
-
-
 async def update_title(
     db: AsyncSession, post_id: int, title: str, *, current_user: Any | None = None
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
-        await _ensure_owner_or_admin(db, post_id, current_user)
+        await check_post_owner_or_admin(db, post_id, current_user)
     result = await post_repository.update_title_by_id(db=db, post_id=post_id, title=title)
     if not result:
         raise ValidationError("Failed to update title")
@@ -99,7 +83,7 @@ async def update_content(
     db: AsyncSession, post_id: int, content: str, *, current_user: Any | None = None
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
-        await _ensure_owner_or_admin(db, post_id, current_user)
+        await check_post_owner_or_admin(db, post_id, current_user)
     result = await post_repository.update_content_by_id(db=db, post_id=post_id, content=content)
     if not result:
         raise ValidationError("Failed to update content")
@@ -114,7 +98,7 @@ async def update_content(
 
 async def delete_post(db: AsyncSession, post_id: int, *, current_user: Any | None = None) -> SuccessResponse[str]:
     if current_user is not None:
-        await _ensure_owner_or_admin(db, post_id, current_user)
+        await check_post_owner_or_admin(db, post_id, current_user)
     result = await post_repository.delete_post_by_id(db=db, post_id=post_id)
     if not result:
         raise NotFoundError("Post not found")
