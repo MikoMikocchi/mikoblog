@@ -1,13 +1,16 @@
+import logging
 from typing import Annotated
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import AuthenticationError, AuthorizationError
+from core.exceptions import AuthenticationError, AuthorizationError, DatabaseError
 from core.jwt import decode_token, validate_typ
 from db.database import get_db
 from db.repositories.user_repository import get_user_by_id
+
+logger = logging.getLogger(__name__)
 
 # HTTP Bearer scheme (no auto_error to control 401 shape)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -23,9 +26,9 @@ def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> s
     return token
 
 
-def get_current_user(
+async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-    db: Annotated[Session, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> object:
     """
     FastAPI dependency that:
@@ -47,7 +50,11 @@ def get_current_user(
     except (TypeError, ValueError):
         raise AuthenticationError("Invalid subject") from None
 
-    user = get_user_by_id(db, user_id)
+    try:
+        user = await get_user_by_id(db, user_id)
+    except DatabaseError as e:
+        logger.error("Database error while fetching user %s: %s", user_id, e)
+        raise AuthenticationError("User not found") from e
     if user is None:
         raise AuthenticationError("User not found")
     return user
