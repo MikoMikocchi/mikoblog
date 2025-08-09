@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@pg:5432/postgres}
+      PYTHONPATH: /app:/app/src
     volumes:
       # Mount secrets with RSA keys inside the container
       - ./secrets:/app/secrets:ro
@@ -26,7 +27,7 @@ services:
     environment:
       # Ensure tests point to the test DB service inside the compose network
       DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+psycopg2://postgres:postgres@pg_test:5432/mikoblog_test}
-      PYTHONPATH: /src
+      PYTHONPATH: /app:/app/src
     depends_on:
       pg_test:
         condition: service_healthy

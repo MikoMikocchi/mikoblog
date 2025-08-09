@@ -2,7 +2,6 @@ FROM python:3.13.5-bookworm
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -14,6 +13,6 @@ COPY pyproject.toml poetry.lock ./
 
 RUN poetry install --no-root
 
-COPY . .
+COPY src .
 
-CMD ["python", "-m", "src.main"]
+CMD ["python", "-m", "main"]
