@@ -81,6 +81,8 @@ app.include_router(auth_router, prefix="/api/v1")
 # Global handler for domain exceptions
 @app.exception_handler(BlogException)
 async def blog_exception_handler(request: Request, exc: BlogException):
+    # Log the exception for debugging purposes
+    logger.error("BlogException occurred: %s", exc, exc_info=True)
     http_exc = map_exception_to_http(exc)
     return JSONResponse(
         status_code=http_exc.status_code,
@@ -97,6 +99,8 @@ async def blog_exception_handler(request: Request, exc: BlogException):
 # Special handler for auth errors (if raised explicitly)
 @app.exception_handler(AuthenticationError)
 async def auth_exception_handler(request: Request, exc: AuthenticationError):
+    # Log the exception for debugging purposes
+    logger.error("AuthenticationError occurred: %s", exc, exc_info=True)
     http_exc = map_exception_to_http(exc)
     return JSONResponse(
         status_code=http_exc.status_code,
