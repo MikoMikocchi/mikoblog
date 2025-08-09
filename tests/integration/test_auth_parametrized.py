@@ -169,11 +169,11 @@ async def test_login_parametrized(
     db_session: Session,
 ):
     """
-    Стратегия:
-    - Регистрацию пользователя выполняем через публичный API /auth/register,
-      чтобы гарантировать согласованность с сессией, которой пользуется /auth/login.
-    - Далее вычисляем корректное значение логина (username/email/noone) для данного параметра
-      и отправляем /auth/login.
+    Strategy:
+    - Register user via public API /auth/register,
+      to ensure consistency with the session used by /auth/login.
+    - Then calculate the correct login value (username/email/noone) for this parameter
+      and send /auth/login.
     """
     import uuid as _uuid
 

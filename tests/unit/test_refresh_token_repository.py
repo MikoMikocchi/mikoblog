@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import DatabaseError
+from core.exceptions import DatabaseError
 from src.db.repositories import refresh_token_repository as rt_repo
 
 
@@ -49,6 +49,20 @@ async def test_create_database_error(db_session: AsyncSession, monkeypatch):
 
 @pytest.mark.unit
 async def test_revoke_by_jti_database_error(db_session: AsyncSession, monkeypatch):
+    # Mock get_by_jti to return a mock token
+    from datetime import datetime, timedelta
+
+    from db.models.refresh_token import RefreshToken
+
+    mock_token = RefreshToken(
+        id=1, user_id=1, jti="test_jti", issued_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=1)
+    )
+
+    async def mock_get_by_jti(*args, **kwargs):
+        return mock_token
+
+    monkeypatch.setattr(rt_repo, "get_by_jti", mock_get_by_jti)
+
     # Mock SQLAlchemyError to simulate database failure
     async def mock_flush(*args, **kwargs):
         raise SQLAlchemyError("Database connection failed")
@@ -62,6 +76,29 @@ async def test_revoke_by_jti_database_error(db_session: AsyncSession, monkeypatc
 
 @pytest.mark.unit
 async def test_revoke_all_for_user_database_error(db_session: AsyncSession, monkeypatch):
+    # Mock db.execute to return a list of tokens
+    from datetime import datetime, timedelta
+    from unittest.mock import AsyncMock, MagicMock
+
+    from db.models.refresh_token import RefreshToken
+
+    # Create mock tokens
+    mock_token1 = RefreshToken(
+        id=1, user_id=1, jti="test_jti_1", issued_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=1)
+    )
+
+    mock_token2 = RefreshToken(
+        id=2, user_id=1, jti="test_jti_2", issued_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=1)
+    )
+
+    # Create mock result
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_token1, mock_token2]
+
+    # Create mock execute
+    mock_execute = AsyncMock(return_value=mock_result)
+    monkeypatch.setattr(db_session, "execute", mock_execute)
+
     # Mock SQLAlchemyError to simulate database failure
     async def mock_flush(*args, **kwargs):
         raise SQLAlchemyError("Database connection failed")
@@ -75,6 +112,18 @@ async def test_revoke_all_for_user_database_error(db_session: AsyncSession, monk
 
 @pytest.mark.unit
 async def test_rotate_database_error(db_session: AsyncSession, monkeypatch):
+    # Mock get_by_jti to return a mock token
+    from datetime import datetime, timedelta
+
+    from db.models.refresh_token import RefreshToken
+
+    mock_token = RefreshToken(id=1, user_id=1, jti="old_jti", issued_at=datetime.utcnow(), expires_at=datetime.utcnow() + timedelta(days=1))
+
+    async def mock_get_by_jti(*args, **kwargs):
+        return mock_token
+
+    monkeypatch.setattr(rt_repo, "get_by_jti", mock_get_by_jti)
+
     # Mock SQLAlchemyError to simulate database failure
     async def mock_flush(*args, **kwargs):
         raise SQLAlchemyError("Database connection failed")
@@ -90,11 +139,11 @@ async def test_rotate_database_error(db_session: AsyncSession, monkeypatch):
 
 @pytest.mark.unit
 async def test_is_active_database_error(db_session: AsyncSession, monkeypatch):
-    # Mock SQLAlchemyError to simulate database failure
-    async def mock_execute(*args, **kwargs):
+    # Mock get_by_jti to raise SQLAlchemyError
+    async def mock_get_by_jti(*args, **kwargs):
         raise SQLAlchemyError("Database connection failed")
 
-    monkeypatch.setattr(db_session, "execute", mock_execute)
+    monkeypatch.setattr(rt_repo, "get_by_jti", mock_get_by_jti)
 
     # Should raise DatabaseError when SQLAlchemyError occurs
     with pytest.raises(DatabaseError):

@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import DatabaseError
+from core.exceptions import DatabaseError
 from src.db.repositories import user_repository
 
 

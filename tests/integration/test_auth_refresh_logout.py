@@ -87,8 +87,8 @@ async def test_refresh_inactive_token_returns_401(client: AsyncClient, db_sessio
 @pytest.mark.anyio
 async def test_logout_revokes_current_refresh(client: AsyncClient, db_session: Session):
     """
-    Полный путь через публичные эндпоинты:
-    register -> login (ставит __Host-rt) -> logout -> refresh(401)
+    Complete path through public endpoints:
+    register -> login (sets __Host-rt) -> logout -> refresh(401)
     """
     import uuid
 
