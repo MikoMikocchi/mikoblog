@@ -4,6 +4,7 @@ import uuid
 
 import jwt
 
+from core.config import settings
 from core.exceptions import AuthenticationError
 
 from .jwt_keys import load_keypair
@@ -42,6 +43,11 @@ def encode_access_token(user_id: int, *, jti: str | None = None) -> str:
         "jti": jti or make_jti(),
         "typ": "access",
     }
+    # Add issuer/audience if configured
+    if settings.security and settings.security.issuer:
+        payload["iss"] = settings.security.issuer
+    if settings.security and settings.security.audience:
+        payload["aud"] = settings.security.audience
     token = jwt.encode(payload, private_key, algorithm=alg)
     return token
 
@@ -62,6 +68,10 @@ def encode_refresh_token(user_id: int, *, jti: str) -> str:
         "jti": jti,
         "typ": "refresh",
     }
+    if settings.security and settings.security.issuer:
+        payload["iss"] = settings.security.issuer
+    if settings.security and settings.security.audience:
+        payload["aud"] = settings.security.audience
     token = jwt.encode(payload, private_key, algorithm=alg)
     return token
 
@@ -74,11 +84,20 @@ def decode_token(token: str) -> dict[str, Any]:
     try:
         _, public_key = load_keypair()
         # Enforce RS256 explicitly and require standard claims
+        require_claims = ["exp", "iat", "sub", "typ", "jti", "iss"]
+        audience = None
+        if settings.security and settings.security.audience:
+            audience = settings.security.audience
+            require_claims.append("aud")
+
         decoded: dict[str, Any] = jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],
-            options={"require": ["exp", "iat", "sub", "typ", "jti"]},
+            audience=audience,
+            issuer=(settings.security.issuer if settings.security else None),
+            leeway=(settings.security.jwt_clock_skew_seconds if settings.security else 0),
+            options={"require": require_claims},
         )
         return decoded
     except jwt.ExpiredSignatureError:
