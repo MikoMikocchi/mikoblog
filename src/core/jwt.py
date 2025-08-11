@@ -73,8 +73,13 @@ def decode_token(token: str) -> dict[str, Any]:
     """
     try:
         _, public_key = load_keypair()
-        # Enforce RS256 explicitly and disallow others
-        decoded: dict[str, Any] = jwt.decode(token, public_key, algorithms=["RS256"])
+        # Enforce RS256 explicitly and require standard claims
+        decoded: dict[str, Any] = jwt.decode(
+            token,
+            public_key,
+            algorithms=["RS256"],
+            options={"require": ["exp", "iat", "sub", "typ", "jti"]},
+        )
         return decoded
     except jwt.ExpiredSignatureError:
         raise AuthenticationError("Token expired") from None
