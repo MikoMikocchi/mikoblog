@@ -80,9 +80,26 @@ async def rotate_tokens(db: AsyncSession, refresh_jwt: str, *, user_agent: str |
     except (TypeError, ValueError):
         raise AuthenticationError("Invalid refresh token subject") from None
 
-    # Check record state
-    if not await rt_repo.is_active(db, jti):
+    # Check record state & reuse detection
+    # If token is revoked/expired but still presented -> consider it reuse attempt and revoke all tokens
+    now_check = _utcnow()
+    token_record = await rt_repo.get_by_jti(db, jti)
+    if token_record is None:
         raise AuthenticationError("Refresh token is not active")
+    revoked_at_value = getattr(token_record, "revoked_at", None)
+    expires_at_value = getattr(token_record, "expires_at", None)
+    is_expired = expires_at_value is None or expires_at_value <= now_check
+    if revoked_at_value is not None or is_expired:
+        # Reuse detected or expired token presented: revoke all sessions for safety
+        await rt_repo.revoke_all_for_user(db, user_id)
+        try:
+            await db.commit()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+        raise AuthenticationError("Refresh token reuse detected")
 
     # Rotate
     now = _utcnow()

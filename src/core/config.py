@@ -80,6 +80,9 @@ class Settings(BaseSettings):
             secret_key=secret_key,
             algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
             access_token_expire_minutes=int(os.getenv("JWT_EXPIRE_MINUTES", "30")),
+            issuer=os.getenv("JWT_ISSUER", "mikoblog"),
+            audience=os.getenv("JWT_AUDIENCE") or None,
+            jwt_clock_skew_seconds=int(os.getenv("JWT_LEEWAY_SECONDS", "0")),
         )
 
         # Adjust logging for environment

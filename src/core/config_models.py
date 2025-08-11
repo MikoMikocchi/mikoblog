@@ -18,6 +18,9 @@ class SecurityConfig(BaseModel):
     secret_key: str = Field(..., min_length=32, description="JWT secret key")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
+    issuer: str = Field(default="mikoblog", description="JWT issuer (iss)")
+    audience: str | None = Field(default=None, description="JWT audience (aud), optional")
+    jwt_clock_skew_seconds: int = Field(default=0, ge=0, le=300, description="Allowed clock skew for JWT (leeway)")
 
     @field_validator("secret_key")
     @classmethod
