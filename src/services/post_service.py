@@ -1,8 +1,7 @@
-from typing import Any
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import NotFoundError, ValidationError
+from db.models.user import User
 import db.repositories.post_repository as post_repository
 import schemas.posts
 from schemas.responses import PaginatedResponse, PaginationMeta, SuccessResponse
@@ -43,7 +42,7 @@ async def create_post(
     db: AsyncSession,
     post_data: schemas.posts.PostCreate,
     *,
-    current_user: Any | None = None,
+    current_user: User | None = None,
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
         await check_create_post_permission(current_user, post_data.author_id)
@@ -63,7 +62,7 @@ async def create_post(
 
 
 async def update_title(
-    db: AsyncSession, post_id: int, title: str, *, current_user: Any | None = None
+    db: AsyncSession, post_id: int, title: str, *, current_user: User | None = None
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
         await check_post_owner_or_admin(db, post_id, current_user)
@@ -80,7 +79,7 @@ async def update_title(
 
 
 async def update_content(
-    db: AsyncSession, post_id: int, content: str, *, current_user: Any | None = None
+    db: AsyncSession, post_id: int, content: str, *, current_user: User | None = None
 ) -> SuccessResponse[schemas.posts.PostOut]:
     if current_user is not None:
         await check_post_owner_or_admin(db, post_id, current_user)
@@ -96,7 +95,7 @@ async def update_content(
     return SuccessResponse[schemas.posts.PostOut].ok(schemas.posts.PostOut.model_validate(updated_post))
 
 
-async def delete_post(db: AsyncSession, post_id: int, *, current_user: Any | None = None) -> SuccessResponse[str]:
+async def delete_post(db: AsyncSession, post_id: int, *, current_user: User | None = None) -> SuccessResponse[str]:
     if current_user is not None:
         await check_post_owner_or_admin(db, post_id, current_user)
     result = await post_repository.delete_post_by_id(db=db, post_id=post_id)

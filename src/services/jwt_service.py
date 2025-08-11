@@ -25,7 +25,8 @@ async def create_tokens_for_user(db: AsyncSession, user_id: int, *, user_agent: 
     """
     # Create refresh token record (DB) and JWT pair
     now = _utcnow()
-    refresh_expires = now + timedelta(days=7)
+    refresh_days = int(os.getenv("JWT_REFRESH_DAYS", "7"))
+    refresh_expires = now + timedelta(days=refresh_days)
     jti = make_jti()
 
     await rt_repo.create(
@@ -37,6 +38,15 @@ async def create_tokens_for_user(db: AsyncSession, user_id: int, *, user_agent: 
         user_agent=user_agent,
         ip=ip,
     )
+    # Ensure refresh record persisted
+    try:
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise
 
     access = encode_access_token(user_id, jti=make_jti())
     refresh = encode_refresh_token(user_id, jti=jti)
@@ -77,7 +87,8 @@ async def rotate_tokens(db: AsyncSession, refresh_jwt: str, *, user_agent: str |
     # Rotate
     now = _utcnow()
     new_jti = make_jti()
-    new_expires = now + timedelta(days=7)
+    refresh_days = int(os.getenv("JWT_REFRESH_DAYS", "7"))
+    new_expires = now + timedelta(days=refresh_days)
     new_record = await rt_repo.rotate(
         db=db,
         old_jti=jti,
@@ -90,6 +101,15 @@ async def rotate_tokens(db: AsyncSession, refresh_jwt: str, *, user_agent: str |
     )
     if not new_record:
         raise AuthenticationError("Refresh token not found")
+    # Persist rotation before issuing tokens
+    try:
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise
 
     # Issue new pair
     access = encode_access_token(user_id, jti=make_jti())
@@ -114,6 +134,14 @@ async def revoke_refresh_token(db: AsyncSession, refresh_jwt: str) -> None:
         raise AuthenticationError("Invalid refresh token")
 
     await rt_repo.revoke_by_jti(db=db, jti=jti)
+    try:
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise
 
 
 async def revoke_all_user_tokens(db: AsyncSession, user_id: int) -> None:
@@ -121,6 +149,14 @@ async def revoke_all_user_tokens(db: AsyncSession, user_id: int) -> None:
     Revoke all active refresh tokens for the specified user.
     """
     await rt_repo.revoke_all_for_user(db=db, user_id=user_id)
+    try:
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise
 
 
 def validate_refresh_token_and_extract_user_id(refresh_jwt: str) -> int:

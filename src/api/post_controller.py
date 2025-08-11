@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_current_user
 from db.database import get_db
+from db.models.user import User
 import schemas.posts as posts
 from schemas.responses import PaginatedResponse, SuccessResponse
 from services import post_service
@@ -50,7 +51,7 @@ async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -
 async def create_post(
     db: Annotated[AsyncSession, Depends(get_db)],
     post_data: Annotated[posts.PostCreate, Body(...)],
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SuccessResponse[posts.PostOut]:
     return await post_service.create_post(db=db, post_data=post_data, current_user=current_user)
 
@@ -65,7 +66,7 @@ async def update_title(
     post_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     payload: Annotated[posts.PostTitleUpdate, Body(...)],
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SuccessResponse[posts.PostOut]:
     return await post_service.update_title(db=db, post_id=post_id, title=payload.title, current_user=current_user)
 
@@ -80,7 +81,7 @@ async def update_content(
     post_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
     payload: Annotated[posts.PostContentUpdate, Body(...)],
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SuccessResponse[posts.PostOut]:
     return await post_service.update_content(db=db, post_id=post_id, content=payload.content, current_user=current_user)
 
@@ -94,6 +95,6 @@ async def update_content(
 async def delete_post(
     post_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SuccessResponse[str]:
     return await post_service.delete_post(db=db, post_id=post_id, current_user=current_user)

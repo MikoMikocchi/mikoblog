@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.exceptions import AuthenticationError, AuthorizationError, DatabaseError
 from core.jwt import decode_token, validate_typ
 from db.database import get_db
+from db.models.user import User
 from db.repositories.user_repository import get_user_by_id
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ def _extract_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> s
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> object:
+) -> User:
     """
     FastAPI dependency that:
     - Extracts Bearer access token
@@ -60,7 +61,7 @@ async def get_current_user(
     return user
 
 
-def require_admin(_auth: Annotated[object, Depends(get_current_user)]) -> object:
+def require_admin(_auth: Annotated[User, Depends(get_current_user)]) -> User:
     """Require admin role. Returns user if role == 'admin' else AuthorizationError."""
     role = getattr(_auth, "role", "user")
     if role != "admin":
