@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AuthenticationError
@@ -13,6 +13,7 @@ from schemas.users import UserOut
 from services import auth_service, jwt_service
 
 from ...utils.cookies import clear_refresh_cookie, set_refresh_cookie
+from ...utils.csrf import extract_csrf, require_csrf, set_csrf_cookie, validate_csrf_token
 from ...utils.request_context import extract_client, get_refresh_cookie
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -46,7 +47,9 @@ async def login(
 ) -> SuccessResponse[TokenPayload]:
     user_agent, ip = extract_client(request)
     data, refresh_jwt = await auth_service.login(db=db, payload=payload, user_agent=user_agent, ip=ip)
+    # Set refresh cookie and CSRF cookie (for subsequent refresh/logout requests)
     set_refresh_cookie(response, refresh_jwt)
+    set_csrf_cookie(response)
     return data
 
 
@@ -61,6 +64,14 @@ async def refresh(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SuccessResponse[TokenPayload]:
+    # CSRF check if enabled
+    if require_csrf(request):
+        cookie_val, header_val = extract_csrf(request)
+        if not cookie_val or not header_val or not validate_csrf_token(cookie_val) or cookie_val != header_val:
+            # Clear refresh cookie to be safe and reject
+            clear_refresh_cookie(response)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+
     refresh_jwt = get_refresh_cookie(request)
     user_agent, ip = extract_client(request)
     try:
@@ -69,6 +80,8 @@ async def refresh(
         clear_refresh_cookie(response)
         raise
     set_refresh_cookie(response, new_refresh)
+    # Refresh CSRF cookie as well (rotation optional but keeps symmetry)
+    set_csrf_cookie(response)
     return data
 
 
@@ -82,6 +95,13 @@ async def logout(
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SuccessResponse[str]:
+    # CSRF check if enabled
+    if require_csrf(request):
+        cookie_val, header_val = extract_csrf(request)
+        if not cookie_val or not header_val or not validate_csrf_token(cookie_val) or cookie_val != header_val:
+            clear_refresh_cookie(response)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+
     refresh_jwt = request.cookies.get("__Host-rt")
     if not refresh_jwt:
         clear_refresh_cookie(response)
@@ -92,6 +112,14 @@ async def logout(
         clear_refresh_cookie(response)
         raise
     clear_refresh_cookie(response)
+    # Clear CSRF cookie as session ends
+    # Not strictly necessary, but reduces stale tokens exposure
+    try:
+        from ...utils.csrf import clear_csrf_cookie  # local import to avoid top-level import cycles
+
+        clear_csrf_cookie(response)
+    except Exception:
+        pass
     return data
 
 
@@ -113,4 +141,10 @@ async def logout_all(
         raise
     data = await auth_service.logout_all(db=db, user_id=user_id)
     clear_refresh_cookie(response)
+    try:
+        from ...utils.csrf import clear_csrf_cookie
+
+        clear_csrf_cookie(response)
+    except Exception:
+        pass
     return data
