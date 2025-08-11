@@ -1,6 +1,8 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 import logging
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Starting up MikoBlog API")
 
     try:
@@ -80,7 +82,7 @@ app.include_router(auth_router, prefix="/api/v1")
 
 # Global handler for domain exceptions
 @app.exception_handler(BlogException)
-async def blog_exception_handler(request: Request, exc: BlogException):
+async def blog_exception_handler(request: Request, exc: BlogException) -> JSONResponse:
     # Log the exception for debugging purposes
     logger.error("BlogException occurred: %s", exc, exc_info=True)
     http_exc = map_exception_to_http(exc)
@@ -98,7 +100,7 @@ async def blog_exception_handler(request: Request, exc: BlogException):
 
 # Special handler for auth errors (if raised explicitly)
 @app.exception_handler(AuthenticationError)
-async def auth_exception_handler(request: Request, exc: AuthenticationError):
+async def auth_exception_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
     # Log the exception for debugging purposes
     logger.error("AuthenticationError occurred: %s", exc, exc_info=True)
     http_exc = map_exception_to_http(exc)
@@ -114,9 +116,20 @@ async def auth_exception_handler(request: Request, exc: AuthenticationError):
     )
 
 
+# Health endpoint
+@app.get("/health", tags=["Health"])
+async def health() -> dict[str, Any]:
+    ok = await check_db_connection()
+    return {
+        "success": ok,
+        "status": "ok" if ok else "degraded",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 # Root endpoint
 @app.get("/", tags=["Root"])
-async def root():
+async def root() -> dict[str, Any]:
     return {
         "success": True,
         "message": f"Welcome to {settings.api_title}",

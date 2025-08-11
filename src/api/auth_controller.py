@@ -23,7 +23,10 @@ auth_router = APIRouter(prefix="/auth", tags=["Auth"])
     summary="Register a new user",
     response_model_exclude_none=True,
 )
-async def register(payload: Annotated[AuthRegister, Body(...)], db: Annotated[AsyncSession, Depends(get_db)]):
+async def register(
+    payload: Annotated[AuthRegister, Body(...)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SuccessResponse[UserOut]:
     return await auth_service.register(db=db, payload=payload)
 
 
@@ -38,7 +41,7 @@ async def login(
     response: Response,
     payload: Annotated[AuthLogin, Body(...)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> SuccessResponse[TokenPayload]:
     user_agent, ip = extract_client(request)
     data, refresh_jwt = await auth_service.login(db=db, payload=payload, user_agent=user_agent, ip=ip)
     set_refresh_cookie(response, refresh_jwt)
@@ -51,11 +54,21 @@ async def login(
     summary="Refresh access token using refresh cookie",
     response_model_exclude_none=True,
 )
-async def refresh(request: Request, response: Response, db: Annotated[AsyncSession, Depends(get_db)]):
+async def refresh(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SuccessResponse[TokenPayload]:
     refresh_jwt = get_refresh_cookie(request)
     user_agent, ip = extract_client(request)
 
-    data, new_refresh = await auth_service.refresh(db=db, refresh_jwt=refresh_jwt, user_agent=user_agent, ip=ip)
+    try:
+        data, new_refresh = await auth_service.refresh(db=db, refresh_jwt=refresh_jwt, user_agent=user_agent, ip=ip)
+    except AuthenticationError:
+        # Clear potentially corrupted/expired refresh-cookie and re-raise the error.
+        clear_refresh_cookie(response)
+        raise
+
     set_refresh_cookie(response, new_refresh)
     return data
 
@@ -65,13 +78,23 @@ async def refresh(request: Request, response: Response, db: Annotated[AsyncSessi
     response_model=SuccessResponse[str],
     summary="Logout from current session",
 )
-async def logout(request: Request, response: Response, db: Annotated[AsyncSession, Depends(get_db)]):
+async def logout(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SuccessResponse[str]:
     refresh_jwt = request.cookies.get("__Host-rt")
     if not refresh_jwt:
         clear_refresh_cookie(response)
         return SuccessResponse[str].ok("Logged out")
 
-    data = await auth_service.logout(db=db, refresh_jwt=refresh_jwt)
+    try:
+        data = await auth_service.logout(db=db, refresh_jwt=refresh_jwt)
+    except AuthenticationError:
+        # Clear cookie even with invalid token, then return 401 via global handler.
+        clear_refresh_cookie(response)
+        raise
+
     clear_refresh_cookie(response)
     return data
 
@@ -85,7 +108,7 @@ async def logout_all(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> SuccessResponse[str]:
     refresh_jwt = get_refresh_cookie(request)
 
     try:

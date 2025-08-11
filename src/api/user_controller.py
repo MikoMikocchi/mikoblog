@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import require_admin
 from db.database import get_db
+from db.models.user import User
 from schemas.responses import PaginatedResponse, SuccessResponse
 from schemas.users import UserCreate, UserOut, UserQuery, UserReplace, UserUpdate
 from services import user_service
@@ -28,7 +29,7 @@ async def list_users(
     limit: int = Query(10, ge=1, le=100, description="Page size (1..100)"),
     username: str | None = Query(None, description="Exact username filter"),
     email: str | None = Query(None, description="Exact email filter"),
-):
+) -> PaginatedResponse[UserOut]:
     query = UserQuery(username=username, email=email)
     return await user_service.list_users(db=db, page=page, limit=limit, query=query)
 
@@ -40,7 +41,7 @@ async def list_users(
     description="Fetch a single user by ID.",
     response_model_exclude_none=True,
 )
-async def get_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+async def get_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> SuccessResponse[UserOut]:
     return await user_service.get_user_by_id(db=db, user_id=user_id)
 
 
@@ -55,7 +56,7 @@ async def get_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
 async def create_user(
     user_data: Annotated[UserCreate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_db)],
-):
+) -> SuccessResponse[UserOut]:
     return await user_service.create_user(db=db, user_data=user_data)
 
 
@@ -70,8 +71,8 @@ async def update_user_patch(
     user_id: int,
     patch: Annotated[UserUpdate, Body(...)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    _admin: Annotated[None, Depends(require_admin)],
-):
+    _admin: Annotated[User, Depends(require_admin)],
+) -> SuccessResponse[UserOut]:
     return await user_service.update_user_patch(db=db, user_id=user_id, patch=patch)
 
 
@@ -86,8 +87,8 @@ async def replace_user(
     user_id: int,
     payload: Annotated[UserReplace, Body(...)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    _admin: Annotated[None, Depends(require_admin)],
-):
+    _admin: Annotated[User, Depends(require_admin)],
+) -> SuccessResponse[UserOut]:
     return await user_service.replace_user_put(db=db, user_id=user_id, payload=payload)
 
 
@@ -100,6 +101,6 @@ async def replace_user(
 async def delete_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _admin: Annotated[None, Depends(require_admin)],
-):
+    _admin: Annotated[User, Depends(require_admin)],
+) -> SuccessResponse[str]:
     return await user_service.delete_user(db=db, user_id=user_id)
