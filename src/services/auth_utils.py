@@ -1,13 +1,12 @@
-from typing import Any, cast
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AuthorizationError, ConflictError, NotFoundError
+from db.models.user import User
 import db.repositories.post_repository as post_repository
 import db.repositories.user_repository as user_repository
 
 
-async def check_post_owner_or_admin(db: AsyncSession, post_id: int, current_user: Any) -> None:
+async def check_post_owner_or_admin(db: AsyncSession, post_id: int, current_user: User) -> None:
     """
     Checks if the user is the owner of the post or an admin.
 
@@ -29,14 +28,14 @@ async def check_post_owner_or_admin(db: AsyncSession, post_id: int, current_user
     if raw_owner_id is None:
         raise NotFoundError("Post has no author")
 
-    owner_id = cast(int, raw_owner_id) if isinstance(raw_owner_id, int) else int(raw_owner_id)
+    owner_id = int(raw_owner_id)
     user_id = int(current_user.id)
 
     if not is_admin and owner_id != user_id:
         raise AuthorizationError("Forbidden")
 
 
-async def check_create_post_permission(current_user: Any, post_author_id: int) -> None:
+async def check_create_post_permission(current_user: User, post_author_id: int) -> None:
     """
     Checks if the user can create a post on behalf of the specified author.
 

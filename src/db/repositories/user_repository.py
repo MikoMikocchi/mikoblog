@@ -49,7 +49,7 @@ async def count_users(db: AsyncSession, username: str | None = None, email: str 
         stmt = stmt.where(and_(*conditions))
 
     res = await db.execute(stmt)
-    return cast(int, res.scalar_one())
+    return int(res.scalar_one())
 
 
 @with_retry(log_prefix="listing users")

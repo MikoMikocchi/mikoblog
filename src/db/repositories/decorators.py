@@ -15,7 +15,7 @@ AsyncFunc = Callable[..., Any]
 AsyncFuncT = Callable[..., T]
 
 
-def with_retry(max_retries: int = 3, log_prefix: str = ""):
+def with_retry(max_retries: int = 3, log_prefix: str = "") -> Callable[[AsyncFuncT], AsyncFuncT]:
     """Decorator for retrying function execution on OperationalError.
 
     Args:
@@ -60,7 +60,7 @@ def with_retry(max_retries: int = 3, log_prefix: str = ""):
     return decorator
 
 
-def handle_db_errors(entity_name: str = ""):
+def handle_db_errors(entity_name: str = "") -> Callable[[AsyncFunc], AsyncFunc]:
     """Decorator for handling database errors without retries.
 
     Used for operations that do not require retries,

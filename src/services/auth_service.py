@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AuthenticationError, ConflictError, ValidationError
 from core.security import get_password_hash, verify_password
+from db.models.user import User
 from db.repositories import user_repository
 from schemas.auth import AuthLogin, AuthRegister, TokenPayload
 from schemas.responses import SuccessResponse
@@ -68,19 +69,32 @@ async def register(db: AsyncSession, payload: AuthRegister) -> SuccessResponse[U
             email=email_clean,
             hashed_password=hashed_password,
         )
+        # Persist transaction explicitly
+        try:
+            await db.commit()
+        except IntegrityError as ie:  # Unique constraint could still trip here in rare races
+            await db.rollback()
+            raise ConflictError("Username or email already registered") from ie
     except IntegrityError as ie:
+        # Repo-level integrity violation (pre-commit)
         raise ConflictError("Username or email already registered") from ie
     except Exception as e:
+        # Map transient locking errors deterministically to Conflict when duplicates appear
         msg = str(e).lower()
         if "lock timeout" in msg or "locknotavailable" in msg or "could not obtain lock" in msg:
             if (await user_repository.get_user_by_username(db, username)) or (await user_repository.get_user_by_email(db, email_clean)):
                 raise ConflictError("Username or email already registered") from e
+        # Ensure transaction is not left open on unexpected errors
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         raise
 
     return SuccessResponse[UserOut].ok(UserOut.model_validate(db_user))
 
 
-async def _resolve_user_by_login(db: AsyncSession, username_or_email: str):
+async def _resolve_user_by_login(db: AsyncSession, username_or_email: str) -> User | None:
     # Repository functions return ORM User or None.
     user = await user_repository.get_user_by_username(db, username_or_email)
     if not user:
@@ -106,7 +120,7 @@ async def login(
     # Help static analyzers: assert presence of id attr, then set local user_id
     if not hasattr(user, "id"):
         raise AuthenticationError("Invalid user object")
-    user_id: int = int(user.id)  # type: ignore[attr-defined]
+    user_id: int = int(user.id)
 
     if not verify_password(payload.password, getattr(user, "hashed_password", "")):
         raise AuthenticationError("Invalid credentials")
