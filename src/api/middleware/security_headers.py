@@ -22,8 +22,23 @@ def register_security_headers_middleware(app: FastAPI) -> None:
         if settings.environment != "development":
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
         response.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+        response.headers.setdefault("Cross-Origin-Embedder-Policy", "require-corp")
+        # A conservative CSP suitable for API responses; adjust if serving docs or static content
+        # Default-src none blocks all by default, allow same-origin fetch and images for docs/debug
+        csp = (
+            "default-src 'none'; "
+            "base-uri 'none'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'"
+        )
+        response.headers.setdefault("Content-Security-Policy", csp)
         return response
