@@ -8,21 +8,21 @@ import asyncio
 from collections.abc import AsyncGenerator
 import os
 import socket
-from typing import Annotated, Protocol, runtime_checkable
 
 from asgi_lifespan import LifespanManager
-from fastapi import Depends
 from httpx import AsyncClient
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Импорты src.* ДОЛЖНЫ выполняться ТОЛЬКО после установки DATABASE_URL
+from src.app import create_app
+from src.db.database import Base, get_db
+
 # --- Now safely import the application and dependencies ---
 # These imports must come ONLY after DATABASE_URL is set
-from src.core.deps import get_current_user
-from src.db.database import Base, get_db
-from src.main import app
+# (перенесены ниже после вызова _setup_test_environment)
 
 
 # --- Function for early test environment setup ---
@@ -161,6 +161,12 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
+def app():
+    """Экземпляр FastAPI-приложения для тестов, созданный фабрикой."""
+    return create_app()
+
+
+@pytest.fixture(scope="session")
 def anyio_backend() -> str:
     """Align anyio_backend scope with anyio plugin expectations."""
     return "asyncio"
@@ -202,7 +208,7 @@ async def db_session() -> AsyncGenerator[AsyncSession]:
 
 
 @pytest.fixture(scope="function")
-async def override_get_db(db_session: AsyncSession):
+async def override_get_db(app, db_session: AsyncSession):
     """
     Override FastAPI dependency to provide our per-test AsyncSession.
     """
@@ -218,26 +224,10 @@ async def override_get_db(db_session: AsyncSession):
 
 
 @pytest.fixture(scope="function")
-async def client(override_get_db: None) -> AsyncGenerator[AsyncClient]:
+async def client(app, override_get_db: None) -> AsyncGenerator[AsyncClient]:
     """
     Async HTTP client with app lifespan management for integration tests.
     """
-
-    # --- Temporary addition of test endpoint ---
-    # This allows checking get_current_user work in tests
-    @runtime_checkable
-    class _HasUserFields(Protocol):
-        id: int
-        username: str
-        email: str
-
-    # Save original routes if any existed
-    original_routes = app.routes.copy()
-
-    # Add test route
-    @app.get("/e2e/protected")
-    async def _protected(user: Annotated[_HasUserFields, Depends(get_current_user)]):
-        return {"user": user.username}
 
     async with LifespanManager(app):
         transport = _create_asgi_transport(app)
@@ -248,50 +238,3 @@ async def client(override_get_db: None) -> AsyncGenerator[AsyncClient]:
             follow_redirects=True,
         ) as ac:
             yield ac
-
-    # Restore original routes after test
-    # This helps avoid route accumulation between tests
-    # (This is not the most reliable way, but works for simple cases.
-    #  More reliably - create a copy of app for tests, like in unit_client)
-    app.routes[:] = original_routes
-    # Clear overrides if they were set only for this test
-    # (but override_get_db already does this, so it's duplication)
-
-
-@pytest.fixture(scope="function")
-async def unit_client() -> AsyncGenerator[AsyncClient]:
-    """
-    Async HTTP client for unit tests without database dependency.
-    Creates a copy of the app to avoid conflicts and side effects.
-    """
-    # Create a copy of the application for isolation
-    import copy
-
-    from src.main import app as original_app
-
-    unit_app = copy.deepcopy(original_app)  # This might not work for FastAPI
-    # Alternative: import create_app and create a new application
-    # But for simplicity we'll leave it as is, assuming routes don't change
-
-    # --- Temporary addition of test endpoint ---
-    @runtime_checkable
-    class _HasUserFields(Protocol):
-        id: int
-        username: str
-        email: str
-
-    # Add test route
-    unit_app.get("/e2e/protected")(lambda user: {"user": user.username})(Depends(get_current_user))
-
-    async with LifespanManager(unit_app):
-        transport = _create_asgi_transport(unit_app)
-        # Fixed base_url: removed extra spaces
-        async with AsyncClient(
-            transport=transport,
-            base_url="https://testserver.local",
-            follow_redirects=True,
-        ) as ac:
-            yield ac
-
-    # For unit_client cleanup is not needed, since it's a copy, but just in case:
-    unit_app.dependency_overrides.clear()
