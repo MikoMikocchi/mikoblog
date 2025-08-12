@@ -16,11 +16,6 @@ from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-# --- Now safely import the application and dependencies ---
-# These imports must come ONLY after DATABASE_URL is set
-from app import create_app
-from db.database import Base, get_db
-
 # src.* imports MUST be executed ONLY after DATABASE_URL is set
 # NOTE: src.* imports are intentionally moved below after env init
 
@@ -110,6 +105,15 @@ def _setup_test_environment() -> str:
 
 # --- EARLY ENVIRONMENT INITIALIZATION ---
 TEST_DATABASE_URL_ASYNC = _setup_test_environment()
+
+
+# --- Now safely import the application and dependencies ---
+# These imports must come ONLY after DATABASE_URL is set
+# isort: off
+from app import create_app
+from db.database import Base, get_db
+
+# isort: on
 
 # --- PyJWT compatibility shim for tests ---
 # Allow jwt.encode(payload, key=None, algorithm=None) used in negative tests.
