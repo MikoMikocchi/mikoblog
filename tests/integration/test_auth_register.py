@@ -2,8 +2,6 @@ from httpx import AsyncClient
 import pytest
 from sqlalchemy.orm import Session
 
-from tests.factories.users import create_user
-
 
 @pytest.mark.integration
 @pytest.mark.auth
@@ -30,8 +28,16 @@ async def test_register_success(client: AsyncClient, db_session: Session):
 @pytest.mark.auth
 @pytest.mark.anyio
 async def test_register_conflict_username(client: AsyncClient, db_session: Session):
-    # pre-create a user with the same username
-    create_user(db_session, username="dupuser", email="dup@example.com")
+    # pre-create a user with the same username via API to ensure commit/visibility
+    resp0 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "dupuser",
+            "email": "dup@example.com",
+            "password": "Str0ng!Passw0rd",
+        },
+    )
+    assert resp0.status_code in (200, 201, 409), resp0.text
     payload = {
         "username": "dupuser",
         "email": "new2@example.com",
@@ -48,7 +54,15 @@ async def test_register_conflict_username(client: AsyncClient, db_session: Sessi
 @pytest.mark.auth
 @pytest.mark.anyio
 async def test_register_conflict_email(client: AsyncClient, db_session: Session):
-    create_user(db_session, username="uniqueuser", email="dup@example.com")
+    resp0 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "uniqueuser",
+            "email": "dup@example.com",
+            "password": "Str0ng!Passw0rd",
+        },
+    )
+    assert resp0.status_code in (200, 201, 409), resp0.text
     payload = {
         "username": "uniqueuser2",
         "email": "dup@example.com",

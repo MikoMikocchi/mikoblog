@@ -1,10 +1,10 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-import src.db.repositories.post_repository as post_repository
-from src.schemas.posts import PostContentUpdate, PostCreate, PostTitleUpdate
-from src.services import post_service
+from core.exceptions import AuthorizationError, NotFoundError, ValidationError
+import db.repositories.post_repository as post_repository
+from schemas.posts import PostContentUpdate, PostCreate, PostTitleUpdate
+from services import post_service
 
 
 @pytest.mark.unit

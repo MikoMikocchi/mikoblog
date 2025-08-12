@@ -24,6 +24,7 @@ def register_auth_rate_limit_middleware(app: FastAPI) -> None:
 
     login_rpm = int(os.getenv("LOGIN_RATE_LIMIT_PER_MINUTE", str(_LOGIN_RPM_DEFAULT)))
     refresh_rpm = int(os.getenv("REFRESH_RATE_LIMIT_PER_MINUTE", str(_REFRESH_RPM_DEFAULT)))
+    testing = os.getenv("TESTING", "").lower() == "true"
     buckets: dict[tuple[str, str], deque[float]] = {}
 
     def _rate_limit_key(ip: str | None, route: str) -> tuple[str, str]:
@@ -48,6 +49,10 @@ def register_auth_rate_limit_middleware(app: FastAPI) -> None:
         is_login = path.endswith("/auth/login")
         is_refresh = path.endswith("/auth/refresh")
         if not (is_login or is_refresh):
+            return await call_next(request)
+
+        # In tests we disable rate limiting to avoid false negatives
+        if testing:
             return await call_next(request)
 
         ip = request.headers.get("x-forwarded-for")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_current_user
@@ -14,6 +14,8 @@ from services import post_service
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
 
+PostCreateModel = posts.PostCreate
+
 
 @router.get(
     "",
@@ -24,6 +26,7 @@ router = APIRouter(prefix="/posts", tags=["Posts"])
 )
 async def get_all_posts(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1, description="Page number starting from 1"),
     limit: int = Query(10, ge=1, le=100, description="Page size (1..100)"),
 ) -> PaginatedResponse[posts.PostOut]:
@@ -50,11 +53,12 @@ async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -
     response_model_exclude_none=True,
 )
 async def create_post(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    post_data: Annotated[posts.PostCreate, Body(...)],
     current_user: Annotated[User, Depends(get_current_user)],
+    payload: Annotated[PostCreateModel, Body(...)],
 ) -> SuccessResponse[posts.PostOut]:
-    return await post_service.create_post(db=db, post_data=post_data, current_user=current_user)
+    return await post_service.create_post(db=db, post_data=payload, current_user=current_user)
 
 
 @router.patch(

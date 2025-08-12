@@ -1,7 +1,7 @@
 from httpx import AsyncClient
 import pytest
 
-from src.core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
+from core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
 
 
 @pytest.mark.unit
@@ -10,7 +10,7 @@ async def test_list_users_validation_error_invalid_page(unit_client: AsyncClient
     async def mock_list_users(*args, **kwargs):
         raise ValidationError("page must be >= 1")
 
-    monkeypatch.setattr("src.services.user_service.list_users", mock_list_users)
+    monkeypatch.setattr("services.user_service.list_users", mock_list_users)
 
     response = await unit_client.get("/api/v1/users?page=0&limit=10")
 
@@ -23,7 +23,7 @@ async def test_list_users_validation_error_invalid_limit(unit_client: AsyncClien
     async def mock_list_users(*args, **kwargs):
         raise ValidationError("limit must be >= 1")
 
-    monkeypatch.setattr("src.services.user_service.list_users", mock_list_users)
+    monkeypatch.setattr("services.user_service.list_users", mock_list_users)
 
     response = await unit_client.get("/api/v1/users?page=1&limit=0")
 
@@ -36,7 +36,7 @@ async def test_get_user_not_found(unit_client: AsyncClient, monkeypatch):
     async def mock_get_user_by_id(*args, **kwargs):
         raise NotFoundError("User with id 1 not found")
 
-    monkeypatch.setattr("src.services.user_service.get_user_by_id", mock_get_user_by_id)
+    monkeypatch.setattr("services.user_service.get_user_by_id", mock_get_user_by_id)
 
     response = await unit_client.get("/api/v1/users/1")
 
@@ -49,7 +49,7 @@ async def test_create_user_validation_error(unit_client: AsyncClient, monkeypatc
     async def mock_create_user(*args, **kwargs):
         raise ValidationError("Invalid email address")
 
-    monkeypatch.setattr("src.services.user_service.create_user", mock_create_user)
+    monkeypatch.setattr("services.user_service.create_user", mock_create_user)
 
     payload = {
         "username": "testuser",
@@ -68,7 +68,7 @@ async def test_create_user_conflict_error(unit_client: AsyncClient, monkeypatch)
     async def mock_create_user(*args, **kwargs):
         raise ConflictError("Username already registered")
 
-    monkeypatch.setattr("src.services.user_service.create_user", mock_create_user)
+    monkeypatch.setattr("services.user_service.create_user", mock_create_user)
 
     payload = {"username": "existinguser", "email": "existing@example.com", "password": "Str0ng!Passw0rd"}
 
@@ -83,7 +83,7 @@ async def test_update_user_patch_not_found(unit_client: AsyncClient, monkeypatch
     async def mock_update_user_patch(*args, **kwargs):
         raise NotFoundError("User with id 1 not found")
 
-    monkeypatch.setattr("src.services.user_service.update_user_patch", mock_update_user_patch)
+    monkeypatch.setattr("services.user_service.update_user_patch", mock_update_user_patch)
 
     payload = {"username": "newusername", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -98,7 +98,7 @@ async def test_update_user_patch_conflict_error(unit_client: AsyncClient, monkey
     async def mock_update_user_patch(*args, **kwargs):
         raise ConflictError("Username already registered")
 
-    monkeypatch.setattr("src.services.user_service.update_user_patch", mock_update_user_patch)
+    monkeypatch.setattr("services.user_service.update_user_patch", mock_update_user_patch)
 
     payload = {"username": "existinguser", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -113,7 +113,7 @@ async def test_update_user_patch_authorization_error(unit_client: AsyncClient, m
     def mock_require_admin(*args, **kwargs):
         raise AuthorizationError("Admin privileges required")
 
-    monkeypatch.setattr("src.core.deps.require_admin", mock_require_admin)
+    monkeypatch.setattr("core.deps.require_admin", mock_require_admin)
 
     payload = {"username": "newusername", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -128,7 +128,7 @@ async def test_replace_user_put_not_found(unit_client: AsyncClient, monkeypatch)
     async def mock_replace_user_put(*args, **kwargs):
         raise NotFoundError("User with id 1 not found")
 
-    monkeypatch.setattr("src.services.user_service.replace_user_put", mock_replace_user_put)
+    monkeypatch.setattr("services.user_service.replace_user_put", mock_replace_user_put)
 
     payload = {"username": "newusername", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -143,7 +143,7 @@ async def test_replace_user_put_conflict_error(unit_client: AsyncClient, monkeyp
     async def mock_replace_user_put(*args, **kwargs):
         raise ConflictError("Username already registered")
 
-    monkeypatch.setattr("src.services.user_service.replace_user_put", mock_replace_user_put)
+    monkeypatch.setattr("services.user_service.replace_user_put", mock_replace_user_put)
 
     payload = {"username": "existinguser", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -158,7 +158,7 @@ async def test_replace_user_put_authorization_error(unit_client: AsyncClient, mo
     def mock_require_admin(*args, **kwargs):
         raise AuthorizationError("Admin privileges required")
 
-    monkeypatch.setattr("src.core.deps.require_admin", mock_require_admin)
+    monkeypatch.setattr("core.deps.require_admin", mock_require_admin)
 
     payload = {"username": "newusername", "email": "new@example.com", "password": "NewStr0ng!Passw0rd"}
 
@@ -173,7 +173,7 @@ async def test_delete_user_not_found(unit_client: AsyncClient, monkeypatch):
     async def mock_delete_user(*args, **kwargs):
         raise NotFoundError("User with id 1 not found")
 
-    monkeypatch.setattr("src.services.user_service.delete_user", mock_delete_user)
+    monkeypatch.setattr("services.user_service.delete_user", mock_delete_user)
 
     response = await unit_client.delete("/api/v1/users/1")
 
@@ -186,7 +186,7 @@ async def test_delete_user_authorization_error(unit_client: AsyncClient, monkeyp
     def mock_require_admin(*args, **kwargs):
         raise AuthorizationError("Admin privileges required")
 
-    monkeypatch.setattr("src.core.deps.require_admin", mock_require_admin)
+    monkeypatch.setattr("core.deps.require_admin", mock_require_admin)
 
     response = await unit_client.delete("/api/v1/users/1")
 

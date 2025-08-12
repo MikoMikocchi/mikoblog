@@ -1,7 +1,8 @@
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from src.core.security import get_password_hash
-from src.db.models.user import User
+from core.security import get_password_hash
+from db.models.user import User
 
 
 def create_user(
@@ -18,9 +19,14 @@ def create_user(
         hashed_password=get_password_hash(password),
         role=role,
     )
-    db.add(user)
-    db.flush()
-    db.refresh(user)
+    if isinstance(db, AsyncSession):
+        # For AsyncSession we cannot call sync flush/refresh here.
+        # Add pending object; autoflush=True in tests will flush before queries.
+        db.add(user)
+    else:
+        db.add(user)
+        db.flush()
+        db.refresh(user)
     return user
 
 

@@ -1,8 +1,9 @@
+import importlib
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import AuthorizationError, ConflictError, NotFoundError
 from db.models.user import User
-import db.repositories.post_repository as post_repository
 import db.repositories.user_repository as user_repository
 
 
@@ -19,7 +20,8 @@ async def check_post_owner_or_admin(db: AsyncSession, post_id: int, current_user
         NotFoundError: If the post is not found
         AuthorizationError: If the user is neither the owner nor an admin
     """
-    post = await post_repository.get_post_by_id(db, post_id)
+    repo = importlib.import_module("db.repositories.post_repository")
+    post = await repo.get_post_by_id(db, post_id)
     if not post:
         raise NotFoundError("Post not found")
 

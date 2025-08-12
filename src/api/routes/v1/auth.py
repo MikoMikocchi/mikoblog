@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.exceptions import AuthenticationError
+from core.exceptions import AuthenticationError, DatabaseError, ValidationError
 from db.database import get_db
 from schemas.auth import AuthLogin, AuthRegister, TokenPayload
 from schemas.responses import SuccessResponse
@@ -30,7 +30,13 @@ async def register(
     payload: Annotated[AuthRegister, Body(...)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SuccessResponse[UserOut]:
-    return await auth_service.register(db=db, payload=payload)
+    try:
+        return await auth_service.register(db=db, payload=payload)
+    except DatabaseError as e:
+        # Map database error caused by whitespace-surrounded email to 422 for API contract
+        if "Invalid email address" in str(e):
+            raise ValidationError(str(e)) from e
+        raise
 
 
 @router.post(

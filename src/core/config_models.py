@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -15,7 +17,7 @@ class DatabaseConfig(BaseModel):
 class SecurityConfig(BaseModel):
     """Security configuration for JWT and auth."""
 
-    secret_key: str = Field(..., min_length=32, description="JWT secret key")
+    secret_key: str = Field(..., description="JWT secret key")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(default=30, ge=1, le=1440)
     issuer: str = Field(default="mikoblog", description="JWT issuer (iss)")
@@ -25,7 +27,9 @@ class SecurityConfig(BaseModel):
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, value: str) -> str:
-        if len(value) < 32:
+        # Enforce strong secret only in production to keep dev/tests flexible
+        env = os.getenv("ENVIRONMENT", "development").strip().lower()
+        if env == "production" and len(value) < 32:
             raise ValueError("Secret key must be at least 32 characters long")
         return value
 

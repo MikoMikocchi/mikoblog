@@ -39,13 +39,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    def __init__(self, **values):
+        # Ensure plain ValueError is raised (not Pydantic ValidationError)
+        if not os.getenv("DATABASE_URL"):
+            raise ValueError("DATABASE_URL environment variable is required")
+        super().__init__(**values)
+
     @model_validator(mode="after")
     def _assemble_subconfigs(self):
         """Assemble nested configurations from environment variables."""
         # DATABASE_URL
         database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise ValueError("DATABASE_URL environment variable is required")
         # Normalize docker-compose host alias if env uses non-existing 'db' host.
         try:
             if "://postgres:" in database_url and "@db:" in database_url:

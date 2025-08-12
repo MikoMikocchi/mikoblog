@@ -2,8 +2,6 @@ from httpx import AsyncClient
 import pytest
 from sqlalchemy.orm import Session
 
-from tests.factories.users import create_user
-
 
 @pytest.mark.integration
 @pytest.mark.auth
@@ -128,29 +126,45 @@ async def test_logout_without_cookie_is_idempotent(client: AsyncClient):
 @pytest.mark.integration
 @pytest.mark.auth
 @pytest.mark.anyio
-async def test_logout_all_revokes_all_user_tokens(client: AsyncClient, db_session: Session):
-    create_user(
-        db_session,
-        username="logoutallu",
-        email="logoutall@example.com",
-        password="Str0ng!Passw0rd",
+async def test_logout_all_revokes_all_user_tokens(app, client: AsyncClient, db_session: Session):
+    # Create user via API to ensure proper commit/visibility for subsequent login
+    r_reg = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "logoutallu",
+            "email": "logoutall@example.com",
+            "password": "Str0ng!Passw0rd",
+        },
     )
+    assert r_reg.status_code in (200, 201), r_reg.text
 
     r1 = await client.post(
         "/api/v1/auth/login",
         json={"username_or_email": "logoutallu", "password": "Str0ng!Passw0rd"},
     )
     assert r1.status_code == 200, r1.text
+    # Ensure refresh cookie stored in client's jar
+    set_cookie_headers1 = r1.headers.get_list("set-cookie")
+    assert any("__Host-rt=" in h for h in set_cookie_headers1)
+    assert client.cookies.get("__Host-rt") is not None
 
     from httpx import AsyncClient as _AsyncClient
 
-    async with _AsyncClient(base_url=str(client.base_url)) as c2:
+    from tests.conftest import _create_asgi_transport
+
+    async with _AsyncClient(
+        transport=_create_asgi_transport(app),
+        base_url=str(client.base_url),
+        follow_redirects=True,
+    ) as c2:
         r2 = await c2.post(
             "/api/v1/auth/login",
             json={"username_or_email": "logoutallu", "password": "Str0ng!Passw0rd"},
         )
         assert r2.status_code == 200, r2.text
 
+        # Ensure original client's cookie still present before logout-all
+        assert client.cookies.get("__Host-rt") is not None
         r_out_all = await client.post("/api/v1/auth/logout-all")
         assert r_out_all.status_code == 200, r_out_all.text
 

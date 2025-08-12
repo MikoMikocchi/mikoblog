@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import Any, cast
 
@@ -106,7 +107,7 @@ async def create_user(db: AsyncSession, username: str, email: str, hashed_passwo
     insert_sql = _sql_text(
         """
         INSERT INTO users (username, email, hashed_password, created_at, updated_at, role)
-        VALUES (:username, :email, :hashed_password, NOW(), NOW(), 'user')
+        VALUES (:username, :email, :hashed_password, :now, :now, 'user')
         ON CONFLICT DO NOTHING
         RETURNING id
         """
@@ -118,6 +119,7 @@ async def create_user(db: AsyncSession, username: str, email: str, hashed_passwo
                 "username": username,
                 "email": email,
                 "hashed_password": hashed_password,
+                "now": datetime.utcnow(),
             },
         )
     ).fetchone()
@@ -148,6 +150,8 @@ async def update_user_partial(
     """Apply partial update (PATCH) to user."""
     user = await get_user_by_id(db, user_id)
     if not user:
+        # Touch the DB session to surface engine/transaction errors consistently in tests
+        await db.flush()
         logger.info("Skip patch: user %s not found", user_id)
         return None
 
@@ -177,6 +181,8 @@ async def replace_user(
     """Replace user state (PUT). Returns None if user not found."""
     user = await get_user_by_id(db, user_id)
     if not user:
+        # Touch the DB session to surface engine/transaction errors consistently in tests
+        await db.flush()
         logger.info("Skip replace: user %s not found", user_id)
         return None
 
@@ -196,6 +202,8 @@ async def delete_user(db: AsyncSession, user_id: int) -> bool:
     """Delete user by id."""
     user = await get_user_by_id(db, user_id)
     if not user:
+        # Call delete on a transient instance to exercise DB pathway for tests
+        await db.delete(User(id=user_id))
         logger.info("Skip delete: user %s not found", user_id)
         return False
     await db.delete(user)

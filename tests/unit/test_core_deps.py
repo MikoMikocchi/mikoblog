@@ -4,9 +4,10 @@ from typing import Annotated, Protocol
 from fastapi import Depends, FastAPI, status
 from httpx import AsyncClient
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from src.core.deps import get_current_user, require_admin
+from core.deps import get_current_user, require_admin
 from tests.factories.users import create_user
 
 
@@ -49,6 +50,9 @@ async def test_get_current_user_success(client: AsyncClient, db_session: Session
         email="dep@example.com",
         password="Str0ng!Passw0rd",
     )
+    if isinstance(db_session, AsyncSession):
+        await db_session.flush()
+        await db_session.commit()
     login_payload = {"username_or_email": "depuser", "password": "Str0ng!Passw0rd"}
     resp = await client.post("/api/v1/auth/login", json=login_payload)
     assert resp.status_code == 200, resp.text
@@ -84,6 +88,9 @@ async def test_get_current_user_wrong_typ_401(client: AsyncClient, db_session: S
         email="dep2@example.com",
         password="Str0ng!Passw0rd",
     )
+    if isinstance(db_session, AsyncSession):
+        await db_session.flush()
+        await db_session.commit()
     login_payload = {"username_or_email": "depuser2", "password": "Str0ng!Passw0rd"}
     resp = await client.post("/api/v1/auth/login", json=login_payload)
     assert resp.status_code == 200
@@ -119,6 +126,9 @@ async def test_require_admin_success_and_forbidden(client: AsyncClient, db_sessi
         password="Str0ng!Passw0rd",
         role="user",
     )
+    if isinstance(db_session, AsyncSession):
+        await db_session.flush()
+        await db_session.commit()
     resp = await client.post(
         "/api/v1/auth/login",
         json={"username_or_email": "normal", "password": "Str0ng!Passw0rd"},
@@ -135,6 +145,9 @@ async def test_require_admin_success_and_forbidden(client: AsyncClient, db_sessi
         password="Str0ng!Passw0rd",
         role="admin",
     )
+    if isinstance(db_session, AsyncSession):
+        await db_session.flush()
+        await db_session.commit()
     resp2 = await client.post(
         "/api/v1/auth/login",
         json={"username_or_email": "admin1", "password": "Str0ng!Passw0rd"},

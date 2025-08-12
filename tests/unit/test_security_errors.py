@@ -1,6 +1,6 @@
 import pytest
 
-from src.core import security
+from core import security
 
 
 @pytest.mark.unit

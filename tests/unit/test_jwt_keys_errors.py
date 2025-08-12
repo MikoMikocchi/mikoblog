@@ -1,6 +1,6 @@
 import pytest
 
-from src.core import jwt_keys
+from core import jwt_keys
 
 
 @pytest.mark.unit

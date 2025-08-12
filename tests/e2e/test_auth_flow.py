@@ -30,7 +30,8 @@ async def test_full_auth_flow_register_login_access_refresh_logout(client: Async
     print("Set-Cookie headers:", resp.headers.get_list("set-cookie"))
     # httpx ASGITransport stores cookies under the exact netloc used in base_url.
     # We use https://testserver.local in conftest, so use that for subsequent requests and lookups.
-    cookie_val = client.cookies.get("__Host-rt", domain="testserver.local", path="/api/v1/auth")
+    # __Host- cookies must have Path="/"; httpx Cookies.get requires exact path match
+    cookie_val = client.cookies.get("__Host-rt", domain="testserver.local", path="/")
     assert cookie_val is not None, "Refresh cookie was not stored in client cookie jar"
     access = resp.json()["data"]["access_token"]
 

@@ -1,8 +1,8 @@
 from jwt import ExpiredSignatureError, InvalidTokenError
 import pytest
 
-from src.core import jwt
-from src.core.exceptions import AuthenticationError
+from core import jwt
+from core.exceptions import AuthenticationError
 
 
 @pytest.mark.unit
@@ -11,7 +11,7 @@ async def test_decode_token_expired_signature(monkeypatch):
     def mock_decode(*args, **kwargs):
         raise ExpiredSignatureError("Signature has expired")
 
-    monkeypatch.setattr("src.core.jwt.jwt.decode", mock_decode)
+    monkeypatch.setattr("core.jwt.jwt.decode", mock_decode)
 
     with pytest.raises(AuthenticationError) as exc_info:
         jwt.decode_token("expired_token")
@@ -25,7 +25,7 @@ async def test_decode_token_invalid_token(monkeypatch):
     def mock_decode(*args, **kwargs):
         raise InvalidTokenError("Invalid token")
 
-    monkeypatch.setattr("src.core.jwt.jwt.decode", mock_decode)
+    monkeypatch.setattr("core.jwt.jwt.decode", mock_decode)
 
     with pytest.raises(AuthenticationError) as exc_info:
         jwt.decode_token("invalid_token")

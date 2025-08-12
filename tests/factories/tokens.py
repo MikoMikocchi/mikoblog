@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from src.core.jwt import encode_refresh_token, make_jti
-from src.db.repositories import refresh_token_repository as rt_repo
+from core.jwt import encode_refresh_token, make_jti
+from db.repositories import refresh_token_repository as rt_repo
 
 
 def issue_refresh_for_user(

@@ -1,6 +1,6 @@
 import pytest
 
-from src.db import database
+from db import database
 
 
 @pytest.mark.unit

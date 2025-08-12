@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.db.utils import transactional
+from db.utils import transactional
 
 
 @pytest.mark.unit

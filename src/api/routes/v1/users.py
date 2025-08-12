@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import require_admin
+from core.deps import get_current_user, require_admin
 from db.database import get_db
 from db.models.user import User
 from schemas.responses import PaginatedResponse, SuccessResponse
@@ -43,7 +43,11 @@ async def list_users(
     description="Fetch a single user by ID.",
     response_model_exclude_none=True,
 )
-async def get_user(user_id: int, db: Annotated[AsyncSession, Depends(get_db)]) -> SuccessResponse[UserOut]:
+async def get_user(
+    user_id: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _current: Annotated[User, Depends(get_current_user)],
+) -> SuccessResponse[UserOut]:
     return await user_service.get_user_by_id(db=db, user_id=user_id)
 
 

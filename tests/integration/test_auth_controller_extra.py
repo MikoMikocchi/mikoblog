@@ -2,7 +2,7 @@ from httpx import AsyncClient
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.jwt import decode_token, validate_typ
+from core.jwt import decode_token, validate_typ
 
 
 @pytest.mark.integration
@@ -120,7 +120,7 @@ async def test_login_sets_cookie_attributes_strict(client: AsyncClient, db_sessi
     assert r.status_code == 200, r.text
     set_cookie = r.headers.get("set-cookie", "")
     # Controller uses utils.cookies.set_refresh_cookie ->
-    # __Host-rt; httponly; secure; samesite=strict; path=/auth
+    # __Host-rt; httponly; secure; samesite=strict; path=/
 
     # Note: httpx/Starlette may normalize SameSite casing to lowercase
     # ("samesite=strict" or "SameSite=strict").
@@ -130,8 +130,8 @@ async def test_login_sets_cookie_attributes_strict(client: AsyncClient, db_sessi
     assert "HttpOnly" in set_cookie
     assert "Secure" in set_cookie
     assert ("SameSite=Strict" in set_cookie) or ("SameSite=strict" in set_cookie) or ("samesite=strict" in set_cookie.lower())
-    # Path can be normalized by router prefixing (e.g., /api/v1/auth).
-    assert "/auth" in set_cookie and "Path=" in set_cookie
+    # __Host- cookies MUST have Path="/" per spec.
+    assert "Path=/" in set_cookie
 
 
 @pytest.mark.integration

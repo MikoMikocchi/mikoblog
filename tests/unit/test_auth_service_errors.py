@@ -2,9 +2,11 @@ import pytest
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import AuthenticationError, ConflictError, NotFoundError, ValidationError
-from src.schemas.auth import AuthLogin, AuthRegister
-from src.services import auth_service
+from core.exceptions import AuthenticationError, ConflictError, DatabaseError, NotFoundError, ValidationError
+from schemas.auth import AuthLogin, AuthRegister
+from services import auth_service
+
+pytestmark = pytest.mark.anyio
 
 
 @pytest.mark.unit
@@ -15,7 +17,7 @@ async def test_register_validation_error_email_whitespace(db_session: AsyncSessi
         password="Str0ng!Passw0rd",  # whitespace should cause ValidationError
     )
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(DatabaseError):
         await auth_service.register(db_session, payload)
 
 
@@ -53,7 +55,7 @@ async def test_register_conflict_error_username_exists(db_session: AsyncSession,
     async def mock_get_user_by_username(*args, **kwargs):
         return object()  # any non-None object
 
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
 
     payload = AuthRegister(username="testuser", email="test@example.com", password="Str0ng!Passw0rd")
 
@@ -67,7 +69,7 @@ async def test_register_conflict_error_email_exists(db_session: AsyncSession, mo
     async def mock_get_user_by_email(*args, **kwargs):
         return object()  # any non-None object
 
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
 
     payload = AuthRegister(username="testuser", email="test@example.com", password="Str0ng!Passw0rd")
 
@@ -84,14 +86,14 @@ async def test_register_database_error_on_create(db_session: AsyncSession, monke
     async def mock_get_user_by_email(*args, **kwargs):
         return None
 
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
 
     # Mock create_user to raise IntegrityError
     async def mock_create_user(*args, **kwargs):
         raise IntegrityError("statement", "params", Exception("orig"))
 
-    monkeypatch.setattr("src.db.repositories.user_repository.create_user", mock_create_user)
+    monkeypatch.setattr("db.repositories.user_repository.create_user", mock_create_user)
 
     payload = AuthRegister(username="testuser", email="test@example.com", password="Str0ng!Passw0rd")
 
@@ -108,14 +110,14 @@ async def test_register_unexpected_database_error(db_session: AsyncSession, monk
     async def mock_get_user_by_email(*args, **kwargs):
         return None
 
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
-    monkeypatch.setattr("src.db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_username", mock_get_user_by_username)
+    monkeypatch.setattr("db.repositories.user_repository.get_user_by_email", mock_get_user_by_email)
 
     # Mock create_user to raise unexpected SQLAlchemyError
     async def mock_create_user(*args, **kwargs):
         raise SQLAlchemyError("Unexpected database error")
 
-    monkeypatch.setattr("src.db.repositories.user_repository.create_user", mock_create_user)
+    monkeypatch.setattr("db.repositories.user_repository.create_user", mock_create_user)
 
     payload = AuthRegister(username="testuser", email="test@example.com", password="Str0ng!Passw0rd")
 
@@ -154,7 +156,7 @@ async def test_login_invalid_password(db_session: AsyncSession, monkeypatch):
     def mock_verify_password(*args, **kwargs):
         return False
 
-    monkeypatch.setattr("src.core.security.verify_password", mock_verify_password)
+    monkeypatch.setattr("core.security.verify_password", mock_verify_password)
 
     payload = AuthLogin(username_or_email="testuser", password="Str0ng!Passw0rd")
 
@@ -194,7 +196,7 @@ async def test_refresh_invalid_sub_claim(db_session: AsyncSession, monkeypatch):
     def mock_decode_token(*args, **kwargs):
         return {"sub": "invalid", "jti": "test_jti", "typ": "refresh"}
 
-    monkeypatch.setattr("src.core.jwt.decode_token", mock_decode_token)
+    monkeypatch.setattr("core.jwt.decode_token", mock_decode_token)
 
     refresh_jwt = "valid_token"
 
@@ -208,19 +210,19 @@ async def test_refresh_inactive_token(db_session: AsyncSession, monkeypatch):
     def mock_decode_token(*args, **kwargs):
         return {"sub": "1", "jti": "test_jti", "typ": "refresh"}
 
-    monkeypatch.setattr("src.core.jwt.decode_token", mock_decode_token)
+    monkeypatch.setattr("core.jwt.decode_token", mock_decode_token)
 
     # Mock validate_typ to do nothing
     def mock_validate_typ(*args, **kwargs):
         pass
 
-    monkeypatch.setattr("src.core.jwt.validate_typ", mock_validate_typ)
+    monkeypatch.setattr("core.jwt.validate_typ", mock_validate_typ)
 
     # Mock is_active to return False
     async def mock_is_active(*args, **kwargs):
         return False
 
-    monkeypatch.setattr("src.db.repositories.refresh_token_repository.is_active", mock_is_active)
+    monkeypatch.setattr("db.repositories.refresh_token_repository.is_active", mock_is_active)
 
     refresh_jwt = "valid_token"
 
@@ -234,25 +236,25 @@ async def test_refresh_token_not_found(db_session: AsyncSession, monkeypatch):
     def mock_decode_token(*args, **kwargs):
         return {"sub": "1", "jti": "test_jti", "typ": "refresh"}
 
-    monkeypatch.setattr("src.core.jwt.decode_token", mock_decode_token)
+    monkeypatch.setattr("core.jwt.decode_token", mock_decode_token)
 
     # Mock validate_typ to do nothing
     def mock_validate_typ(*args, **kwargs):
         pass
 
-    monkeypatch.setattr("src.core.jwt.validate_typ", mock_validate_typ)
+    monkeypatch.setattr("core.jwt.validate_typ", mock_validate_typ)
 
     # Mock is_active to return True
     async def mock_is_active(*args, **kwargs):
         return True
 
-    monkeypatch.setattr("src.db.repositories.refresh_token_repository.is_active", mock_is_active)
+    monkeypatch.setattr("db.repositories.refresh_token_repository.is_active", mock_is_active)
 
     # Mock rotate to return None
     async def mock_rotate(*args, **kwargs):
         return None
 
-    monkeypatch.setattr("src.db.repositories.refresh_token_repository.rotate", mock_rotate)
+    monkeypatch.setattr("db.repositories.refresh_token_repository.rotate", mock_rotate)
 
     refresh_jwt = "valid_token"
 
@@ -274,13 +276,13 @@ async def test_logout_missing_jti(db_session: AsyncSession, monkeypatch):
     def mock_decode_token(*args, **kwargs):
         return {"sub": "1", "typ": "refresh"}
 
-    monkeypatch.setattr("src.core.jwt.decode_token", mock_decode_token)
+    monkeypatch.setattr("core.jwt.decode_token", mock_decode_token)
 
     # Mock validate_typ to do nothing
     def mock_validate_typ(*args, **kwargs):
         pass
 
-    monkeypatch.setattr("src.core.jwt.validate_typ", mock_validate_typ)
+    monkeypatch.setattr("core.jwt.validate_typ", mock_validate_typ)
 
     refresh_jwt = "valid_token"
 

@@ -4,7 +4,7 @@ from httpx import AsyncClient
 import jwt as pyjwt
 import pytest
 
-from src.core.jwt_keys import load_keypair
+from core.jwt_keys import load_keypair
 
 
 @pytest.fixture(autouse=True, scope="module")

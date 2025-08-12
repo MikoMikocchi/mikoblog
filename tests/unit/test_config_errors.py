@@ -1,6 +1,6 @@
 import pytest
 
-from src.core.config import Settings, get_settings
+from core.config import Settings, get_settings
 
 
 @pytest.mark.unit

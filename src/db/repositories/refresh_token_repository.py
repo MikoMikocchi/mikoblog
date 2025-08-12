@@ -1,5 +1,5 @@
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 import logging
 
 from sqlalchemy import and_, select
@@ -9,6 +9,18 @@ from db.models.refresh_token import RefreshToken
 from db.repositories.decorators import handle_db_errors, with_retry
 
 logger = logging.getLogger(__name__)
+
+
+def _to_naive_utc(dt: datetime | None) -> datetime | None:
+    """Convert aware or naive datetime to naive UTC (tzinfo=None).
+    Returns None if input is None.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    # assume already naive UTC by convention
+    return dt
 
 
 @with_retry(log_prefix="fetching refresh token by jti")
@@ -51,6 +63,9 @@ async def create(
     ip: str | None = None,
 ) -> RefreshToken:
     """Create a new refresh token record."""
+    # Normalize to naive UTC to match TIMESTAMP WITHOUT TIME ZONE columns
+    issued_at = _to_naive_utc(issued_at)  # type: ignore[assignment]
+    expires_at = _to_naive_utc(expires_at)  # type: ignore[assignment]
     token = RefreshToken(
         user_id=user_id,
         jti=jti,
@@ -70,7 +85,7 @@ async def create(
 @with_retry(log_prefix="revoking refresh token")
 async def revoke_by_jti(db: AsyncSession, jti: str, *, revoked_at: datetime | None = None) -> bool:
     """Revoke a refresh token by jti. Returns True if updated."""
-    revoked_at = revoked_at or datetime.utcnow()
+    revoked_at = _to_naive_utc(revoked_at) or datetime.utcnow()
     token = await get_by_jti(db, jti)
     if token is None:
         logger.info("Skip revoke: refresh token jti=%s not found", jti)
@@ -88,7 +103,7 @@ async def revoke_by_jti(db: AsyncSession, jti: str, *, revoked_at: datetime | No
 @with_retry(log_prefix="revoking all refresh tokens for user")
 async def revoke_all_for_user(db: AsyncSession, user_id: int, *, revoked_at: datetime | None = None) -> int:
     """Revoke all active refresh tokens for a user. Returns count affected."""
-    revoked_at = revoked_at or datetime.utcnow()
+    revoked_at = _to_naive_utc(revoked_at) or datetime.utcnow()
     stmt = select(RefreshToken).where(and_(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None)))
     res = await db.execute(stmt)
     tokens = list(res.scalars().all())
@@ -129,6 +144,9 @@ async def rotate(
     if getattr(old, "revoked_at", None) is None:
         object.__setattr__(old, "revoked_at", now)
 
+    # Normalize to naive UTC to match TIMESTAMP WITHOUT TIME ZONE columns
+    issued_at = _to_naive_utc(issued_at)  # type: ignore[assignment]
+    expires_at = _to_naive_utc(expires_at)  # type: ignore[assignment]
     new_token = RefreshToken(
         user_id=user_id,
         jti=new_jti,

@@ -3,7 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import DatabaseError
-from src.db.repositories import user_repository
+from db.repositories import user_repository
 
 
 @pytest.mark.unit

@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import DatabaseError
-from src.db.repositories import refresh_token_repository as rt_repo
+from db.repositories import refresh_token_repository as rt_repo
 
 
 @pytest.mark.unit

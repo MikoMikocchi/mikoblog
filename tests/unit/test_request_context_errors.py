@@ -1,8 +1,8 @@
 from fastapi import Request
 import pytest
 
-from src.api.utils import request_context
-from src.core.exceptions import AuthenticationError
+from api.utils import request_context
+from core.exceptions import AuthenticationError
 
 
 @pytest.mark.unit

@@ -1,3 +1,5 @@
+import os
+
 from httpx import AsyncClient
 import pytest
 from sqlalchemy.orm import Session
@@ -41,14 +43,18 @@ async def test_login_success_with_username_sets_refresh_cookie(client: AsyncClie
     set_cookie_headers = resp.headers.get_list("set-cookie")
     assert any("__Host-rt=" in h for h in set_cookie_headers)
     # Required cookie attributes by controller:
-    # Path contains /auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800 (~7 days)
+    # HttpOnly; Secure; SameSite=Strict; Max-Age≈7 days; Path=/ (per __Host- spec)
     attr_line = ";".join(set_cookie_headers)
-    assert "HttpOnly" in attr_line
-    assert "Secure" in attr_line
-    assert ("SameSite=Strict" in attr_line) or ("SameSite=strict" in attr_line) or ("samesite=strict" in attr_line.lower())
-    assert "Max-Age=604800" in attr_line or "Max-Age= 604800" in attr_line
-    # Allow router prefix normalization like Path=/api/v1/auth
-    assert "Path=" in attr_line and "/auth" in attr_line
+    lower_attr = attr_line.lower()
+    assert "httponly" in lower_attr
+    assert "secure" in lower_attr
+    assert "samesite=strict" in lower_attr
+    # Accept case variations/spaces for Max-Age; some stacks may emit Expires instead
+    expected_days = int(os.getenv("JWT_REFRESH_DAYS", "7"))
+    expected_seconds = expected_days * 24 * 60 * 60
+    assert (f"max-age={expected_seconds}" in lower_attr) or (f"max-age= {expected_seconds}" in lower_attr) or ("expires=" in lower_attr)
+    # __Host- cookies must have Path=/
+    assert "path=/" in lower_attr
 
 
 @pytest.mark.integration

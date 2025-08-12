@@ -1,7 +1,7 @@
 from fastapi import Response
 import pytest
 
-from src.api.utils import cookies
+from api.utils import cookies
 
 
 @pytest.mark.unit
